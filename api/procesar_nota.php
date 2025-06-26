@@ -1,83 +1,157 @@
 <?php
-require '../includes/conexion.php';
+header('Content-Type: application/json');
+require_once '../includes/conexion.php';
 
-$logPath = "logs/log.txt";
-$logProcesadoPath = "logs/log_procesado.txt";
-$errores = [];
-$procesados = [];
+$response = ['status' => false, 'message' => '', 'processed_count' => 0];
+$logFilePath = 'logs/log.txt'; // Asegúrate de que la ruta sea correcta y apunte al archivo .txt
 
-// Obtener el año académico activo
-$stmtAnio = $pdo->query("SELECT id_anio FROM anios_academicos WHERE activo = TRUE LIMIT 1");
-$id_anio = $stmtAnio->fetchColumn();
-
-if (!$id_anio) {
-    exit("No hay un año académico activo configurado.");
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $response['message'] = 'Método no permitido.';
+    echo json_encode($response);
+    exit();
 }
 
-// Verificar si el archivo existe
-if (!file_exists($logPath)) {
-    exit("No se encontró el archivo de log.");
-}
-
-$lineas = file($logPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-
-foreach ($lineas as $linea) {
-    if (!preg_match('/^REG-\w+ \| estudiante:\d+ \| asignatura:\d+ \| p1:[\d.]+ \| p2:[\d.]+ \| final:[\d.]+ \| obs:/', $linea)) {
-        continue;
+try {
+    if (!isset($pdo) || !$pdo instanceof PDO) {
+        throw new Exception('Conexión PDO no disponible.');
     }
 
-    preg_match('/^REG-(\w+).*estudiante:(\d+).*asignatura:(\d+).*p1:([\d.]+).*p2:([\d.]+).*final:([\d.]+).*obs:(.*)$/', $linea, $matches);
-
-    if (count($matches) !== 8) {
-        $errores[] = "Línea inválida: $linea";
-        continue;
+    if (!file_exists($logFilePath) || filesize($logFilePath) == 0) {
+        $response['status'] = true;
+        $response['message'] = 'No hay notas pendientes para procesar.';
+        echo json_encode($response);
+        exit();
     }
 
-    list(, $refID, $id_estudiante, $id_asignatura, $p1, $p2, $final, $obs) = $matches;
-    $p1 = floatval($p1);
-    $p2 = floatval($p2);
-    $final = floatval($final);
-    $obs = trim($obs);
+    $lines = file($logFilePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($lines === false) {
+        throw new Exception('No se pudo leer el archivo de log.');
+    }
 
-    foreach ([$p1, $p2, $final] as $nota) {
-        if ($nota < 0 || $nota > 10) {
-            $errores[] = "❌ Nota fuera de rango en línea: $linea";
-            continue 2;
+    $pdo->beginTransaction();
+
+    $processedCount = 0;
+    foreach ($lines as $line) {
+        $noteData = json_decode($line, true);
+
+        if (!is_array($noteData) || !isset($noteData['id_inscripcion'])) {
+            error_log("Línea inválida: " . $line);
+            continue;
         }
+
+        $id_inscripcion = (int)$noteData['id_inscripcion'];
+        $parcial_1 = $noteData['parcial_1'] ?? null;
+        $parcial_2 = $noteData['parcial_2'] ?? null;
+        $examen_final = $noteData['examen_final'] ?? null;
+        $observaciones = $noteData['observaciones'] ?? null;
+
+        // Verifica que la inscripción exista y obtén datos relacionados
+        $stmtInfo = $pdo->prepare("
+            SELECT 
+                i.id_estudiante,
+                i.id_asignatura,
+                i.id_anio
+            FROM inscripciones i
+            WHERE i.id_inscripcion = :id_inscripcion
+        ");
+        $stmtInfo->bindParam(':id_inscripcion', $id_inscripcion, PDO::PARAM_INT);
+        $stmtInfo->execute();
+        $info = $stmtInfo->fetch(PDO::FETCH_ASSOC);
+
+        if (!$info) {
+            error_log("No se encontró información de la inscripción con ID $id_inscripcion.");
+            continue;
+        }
+
+        $id_estudiante = $info['id_estudiante'];
+        $id_asignatura = $info['id_asignatura'];
+        $id_anio = $info['id_anio'];
+
+        // Insertar o actualizar nota
+        $stmtNota = $pdo->prepare("
+            INSERT INTO notas (id_inscripcion, parcial_1, parcial_2, examen_final, observaciones)
+            VALUES (:id_inscripcion, :parcial_1, :parcial_2, :examen_final, :observaciones)
+            ON DUPLICATE KEY UPDATE
+                parcial_1 = VALUES(parcial_1),
+                parcial_2 = VALUES(parcial_2),
+                examen_final = VALUES(examen_final),
+                observaciones = VALUES(observaciones)
+        ");
+        $stmtNota->bindParam(':id_inscripcion', $id_inscripcion, PDO::PARAM_INT);
+        $stmtNota->bindValue(':parcial_1', $parcial_1);
+        $stmtNota->bindValue(':parcial_2', $parcial_2);
+        $stmtNota->bindValue(':examen_final', $examen_final);
+        $stmtNota->bindValue(':observaciones', $observaciones);
+        $stmtNota->execute();
+
+        // Calcular promedio y resultado
+        $notas = array_filter([$parcial_1, $parcial_2, $examen_final], fn($n) => $n !== null);
+        $promedio = count($notas) ? array_sum($notas) / count($notas) : null;
+        $resultado = $promedio === null ? 'abandono' : ($promedio >= 5 ? 'aprobado' : 'reprobado');
+
+        // Insertar o actualizar historial
+        $stmtHistCheck = $pdo->prepare("
+            SELECT id FROM historial_academico
+            WHERE id_estudiante = :id_estudiante
+              AND id_asignatura = :id_asignatura
+              AND id_anio = :id_anio
+            LIMIT 1
+        ");
+        $stmtHistCheck->execute([
+            ':id_estudiante' => $id_estudiante,
+            ':id_asignatura' => $id_asignatura,
+            ':id_anio' => $id_anio
+        ]);
+        $historial_id = $stmtHistCheck->fetchColumn();
+
+        if ($historial_id) {
+            $stmtUpdateHist = $pdo->prepare("
+                UPDATE historial_academico
+                SET resultado = :resultado, nota_final = :nota_final, observacion = :observacion, fecha = CURRENT_TIMESTAMP()
+                WHERE id = :id
+            ");
+            $stmtUpdateHist->execute([
+                ':resultado' => $resultado,
+                ':nota_final' => $promedio,
+                ':observacion' => $observaciones,
+                ':id' => $historial_id
+            ]);
+        } else {
+            $stmtInsertHist = $pdo->prepare("
+                INSERT INTO historial_academico (id_estudiante, id_asignatura, resultado, nota_final, id_anio, observacion, fecha)
+                VALUES (:id_estudiante, :id_asignatura, :resultado, :nota_final, :id_anio, :observacion, CURRENT_TIMESTAMP())
+            ");
+            $stmtInsertHist->execute([
+                ':id_estudiante' => $id_estudiante,
+                ':id_asignatura' => $id_asignatura,
+                ':resultado' => $resultado,
+                ':nota_final' => $promedio,
+                ':id_anio' => $id_anio,
+                ':observacion' => $observaciones
+            ]);
+        }
+
+        $processedCount++;
     }
 
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM notas WHERE id_estudiante = ? AND id_asignatura = ?");
-    $stmt->execute([$id_estudiante, $id_asignatura]);
-    if ($stmt->fetchColumn() > 0) {
-        $errores[] = "⚠️ Nota ya existe para estudiante $id_estudiante y asignatura $id_asignatura";
-        continue;
-    }
+    // Vaciar el archivo log tras procesar
+    file_put_contents($logFilePath, '');
 
-    $insert = $pdo->prepare("INSERT INTO notas (id_estudiante, id_asignatura, parcial_1, parcial_2, examen_final, observaciones, id_anio)
-                             VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $exito = $insert->execute([$id_estudiante, $id_asignatura, $p1, $p2, $final, $obs, $id_anio]);
+    $pdo->commit();
 
-    if ($exito) {
-        $procesados[] = $linea;
-    } else {
-        $errores[] = "❌ Error al insertar línea: $linea";
-    }
+    $response['status'] = true;
+    $response['message'] = "Se procesaron {$processedCount} notas correctamente.";
+    $response['processed_count'] = $processedCount;
+
+} catch (PDOException $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    $response['message'] = 'Error de base de datos: ' . $e->getMessage();
+    error_log("PDO Error: " . $e->getMessage());
+} catch (Exception $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    $response['message'] = 'Error: ' . $e->getMessage();
+    error_log("General Error: " . $e->getMessage());
 }
 
-if (!empty($procesados)) {
-    file_put_contents($logProcesadoPath, implode("\n", $procesados) . "\n", FILE_APPEND);
-    $lineasRestantes = array_diff($lineas, $procesados);
-    file_put_contents($logPath, implode("\n", $lineasRestantes));
-}
-
-echo "<h3>Notas procesadas: " . count($procesados) . "</h3>";
-if (!empty($errores)) {
-    echo "<h4>Errores:</h4><ul>";
-    foreach ($errores as $e) {
-        echo "<li>" . htmlspecialchars($e) . "</li>";
-    }
-    echo "</ul>";
-} else {
-    echo "<p>Sin errores.</p>";
-}
+echo json_encode($response);
 ?>

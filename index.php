@@ -862,19 +862,19 @@ $profesores = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol = 'profesor'"
 
         <!-- Cuerpo -->
         <div class="modal-body px-4 pt-4">
-          <form>
+          <form action="api/validar_login.php" method="POST" >
             <div class="mb-3">
               <label for="email" class="form-label fw-semibold">
                 <i class="bi bi-person-circle me-1"></i> Nombre
               </label>
-              <input type="text" class="form-control rounded-3" id="email" placeholder="Jenny" required>
+              <input type="text" class="form-control rounded-3" name="usuario" id="email" placeholder="Jenny" required>
             </div>
             <div class="mb-3">
               <label for="password" class="form-label fw-semibold">
                 <i class="bi bi-lock-fill me-1"></i> DIP
               </label>
               <div class="input-group">
-                <input type="password" class="form-control rounded-start-3" id="password" placeholder="••••••••"
+                <input type="password" name="contrasena" class="form-control rounded-start-3" id="password" placeholder="••••••••"
                   required>
                 <button type="button" class="btn btn-outline-secondary rounded-end-3" id="togglePassword" tabindex="-1"
                   aria-label="Mostrar u ocultar contraseña">

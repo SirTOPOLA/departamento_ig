@@ -1,131 +1,125 @@
 <?php
 session_start();
 if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'estudiante') {
-    header("Location: ../login.php");
+    header("Location: ../index.php");
     exit;
 }
-
 require '../includes/conexion.php';
 
-$id_estudiante = $_SESSION['id_usuario'] ?? null;
-if (!$id_estudiante) {
-    exit("Error: Estudiante no identificado.");
-}
-
-// Obtener asignaturas inscritas del estudiante
-$stmt = $pdo->prepare("
-    SELECT a.id_asignatura, a.nombre AS asignatura, a.curso_id, a.semestre_id
-    FROM asignatura_estudiante ae
-    JOIN asignaturas a ON ae.id_asignatura = a.id_asignatura
-    WHERE ae.id_estudiante = ?
-");
-$stmt->execute([$id_estudiante]);
-$asignaturasInscritas = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-if (empty($asignaturasInscritas)) {
-    exit("No tiene asignaturas inscritas.");
-}
-
-$asignaturaIds = array_column($asignaturasInscritas, 'id_asignatura');
-
-// Preparar días y obtener franjas horarias ordenadas
+// Días de clase
 $dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-// Obtener todos los horarios del estudiante para sus asignaturas
-$placeholders = implode(',', array_fill(0, count($asignaturaIds), '?'));
+// Consulta general de horarios con información completa
 $sql = "
-    SELECT h.dia, 
-           DATE_FORMAT(h.hora_inicio, '%H:%i') AS hora_inicio,
-           DATE_FORMAT(h.hora_fin, '%H:%i') AS hora_fin,
-           a.nombre AS asignatura,
-           CONCAT(u.nombre, ' ', u.apellido) AS profesor,
-           au.nombre AS aula,
-           au.ubicacion
-    FROM horarios h
-    JOIN asignaturas a ON h.id_asignatura = a.id_asignatura
-    JOIN profesores p ON h.id_profesor = p.id_profesor
-    JOIN usuarios u ON p.id_profesor = u.id_usuario
-    JOIN aulas au ON h.aula_id = au.id_aula
-    WHERE h.id_asignatura IN ($placeholders)
-    ORDER BY h.hora_inicio, FIELD(h.dia, 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado')
-";
+SELECT 
+    h.id_horario,
+    h.dia,
+    TIME_FORMAT(h.hora_inicio, '%H:%i') AS hora_inicio,
+    TIME_FORMAT(h.hora_fin, '%H:%i') AS hora_fin,
+    a.nombre AS asignatura,
+    CONCAT(u.nombre, ' ', u.apellido) AS profesor,
+    au.nombre AS aula,
+    au.capacidad,
+    au.ubicacion,
+    c.id_curso,
+    c.nombre AS curso,
+    c.turno,
+    c.grupo,
+    s.id_semestre,
+    s.nombre AS semestre
+FROM horarios h
+JOIN asignaturas a ON h.id_asignatura = a.id_asignatura
+JOIN profesores p ON h.id_profesor = p.id_profesor
+JOIN usuarios u ON p.id_profesor = u.id_usuario
+JOIN aulas au ON h.aula_id = au.id_aula
+JOIN cursos c ON a.curso_id = c.id_curso
+JOIN semestres s ON a.semestre_id = s.id_semestre
+ORDER BY c.nombre, s.nombre, h.hora_inicio, FIELD(h.dia, 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado')";
+
 $stmt = $pdo->prepare($sql);
-$stmt->execute($asignaturaIds);
+$stmt->execute();
 $horarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Obtener franjas horarias únicas ordenadas
-$franjas = [];
+// Organizar por curso-semestre
+$datos = [];
+$rangosUnicos = [];
+
 foreach ($horarios as $h) {
+    $clave = $h['curso'] . ' - Turno: ' . ucfirst($h['turno']) . ' - Grupo: ' . $h['grupo'] . ' | ' . $h['semestre'];
     $rango = $h['hora_inicio'] . ' - ' . $h['hora_fin'];
-    if (!in_array($rango, $franjas)) {
-        $franjas[] = $rango;
+
+    if (!isset($datos[$clave])) {
+        $datos[$clave] = [];
     }
-}
 
-// Crear matriz vacía para la tabla horarios
-$tablaHorarios = [];
-foreach ($franjas as $franja) {
-    foreach ($dias as $dia) {
-        $tablaHorarios[$franja][$dia] = null;
+    if (!in_array($rango, $rangosUnicos)) {
+        $rangosUnicos[] = $rango;
     }
-}
 
-// Rellenar matriz con los datos de horarios
-foreach ($horarios as $h) {
-    $rango = $h['hora_inicio'] . ' - ' . $h['hora_fin'];
-    $tablaHorarios[$rango][$h['dia']] = $h;
+    $datos[$clave][$rango][$h['dia']][] = $h;
 }
-
 ?>
 
 <?php include 'header.php'; ?>
 
-<div class="container py-5 px-3 px-md-4">
-  <div class="bg-white shadow rounded-4 p-4">
-    <h2 class="text-primary mb-4">
-      <i class="bi bi-calendar-week me-2"></i> Horarios de Asignaturas
-    </h2>
+<section class="container py-5">
 
-    <?php if (empty($horarios)): ?>
-      <div class="alert alert-info text-center fw-semibold">
-        <i class="bi bi-info-circle me-2"></i> No hay horarios registrados para sus asignaturas.
-      </div>
-    <?php else: ?>
-      <div class="table-responsive">
-        <table class="table table-bordered table-hover align-middle text-center">
-          <thead class="table-primary">
-            <tr>
-              <th scope="col" style="min-width: 90px;">Hora</th>
-              <?php foreach ($dias as $dia): ?>
-                <th scope="col" class="text-uppercase" style="min-width: 140px;">
-                  <?= htmlspecialchars($dia) ?>
-                </th>
-              <?php endforeach; ?>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($tablaHorarios as $rango => $diasClases): ?>
-              <tr>
-                <td class="fw-semibold text-primary"><?= htmlspecialchars($rango) ?></td>
-                <?php foreach ($dias as $dia): ?>
-                  <td class="text-start small px-2 py-3">
-                    <?php if (!empty($diasClases[$dia])): ?>
-                      <div class="fw-bold text-dark"><?= htmlspecialchars($diasClases[$dia]['asignatura']) ?></div>
-                      <div><i class="bi bi-person-badge me-1 text-muted"></i> <?= htmlspecialchars($diasClases[$dia]['profesor']) ?></div>
-                      <div><i class="bi bi-door-open me-1 text-muted"></i> Aula <?= htmlspecialchars($diasClases[$dia]['aula']) ?></div>
-                      <div><i class="bi bi-geo-alt-fill me-1 text-muted"></i> <?= htmlspecialchars($diasClases[$dia]['ubicacion']) ?></div>
-                    <?php else: ?>
-                      <div class="text-muted text-center">—</div>
-                    <?php endif; ?>
-                  </td>
-                <?php endforeach; ?>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
+<?php if (empty($horarios)): ?>
+    <div class="d-flex flex-column align-items-center justify-content-center text-center bg-light border shadow-sm rounded"
+         style="min-height: 80vh;">
+        <i class="bi bi-calendar-x fs-1 text-secondary mb-3"></i>
+        <h4 class="text-muted">No se han registrado horarios</h4>
+        <p class="text-muted">Por el momento, no hay información disponible sobre los horarios académicos.</p>
+    </div>
+<?php else: ?>
+
+        <h3><i class="bi bi-calendar3-week"></i> Horarios Académicos por Semestre</h3>
+        <p class="text-muted">Se muestran los horarios organizados por semestre y curso.</p>
+
+        <?php foreach ($datos as $semestreNombre => $tabla): ?>
+            <div class="card my-5 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><?= htmlspecialchars($semestreNombre) ?></h5>
+                </div>
+                <div class="card-body table-responsive">
+                    <table class="table table-bordered align-middle">
+                        <thead class="table-light text-center">
+                            <tr>
+                                <th>Hora</th>
+                                <?php foreach ($dias as $dia): ?>
+                                    <th><?= $dia ?></th>
+                                <?php endforeach; ?>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($rangosUnicos as $rango): ?>
+                                <tr>
+                                    <td class="text-center fw-bold"><?= $rango ?></td>
+                                    <?php foreach ($dias as $dia): ?>
+                                        <td>
+                                            <?php if (!empty($tabla[$rango][$dia])): ?>
+                                                <?php foreach ($tabla[$rango][$dia] as $h): ?>
+                                                    <div class="p-2 mb-2 border rounded bg-light shadow-sm small">
+                                                        <strong><?= $h['asignatura'] ?></strong><br>
+                                                        Prof.: <?= $h['profesor'] ?><br>
+                                                        Aula: <?= $h['aula'] ?> (<?= $h['capacidad'] ?>)<br>
+                                                        <span class="text-muted"><?= $h['ubicacion'] ?></span>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    <?php endforeach; ?>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        <?php endforeach; ?>
     <?php endif; ?>
-  </div>
-</div>
+</section>
+
 
 <?php include 'footer.php'; ?>

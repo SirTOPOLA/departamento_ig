@@ -1,7 +1,4 @@
-<?php 
-include_once('header.php'); ?>
-
-
+<?php include_once('header.php'); ?>
 <style>
         body {
             font-family: "Inter", sans-serif;
@@ -45,31 +42,23 @@ include_once('header.php'); ?>
             background-color: #fff3cd; /* Light yellow for convalidated */
         }
         .action-cell {
-            min-width: 250px; /* Asegura espacio para los botones */
+            min-width: 200px; /* Asegura espacio para los botones */
         }
         .note-input {
             width: 80px; /* Tamaño más pequeño para la nota */
         }
-        /* Estilos para el modal de seguimiento */
-        .seguimiento-section {
-            border-top: 1px solid #eee;
-            padding-top: 15px;
-            margin-top: 15px;
-        }
-        .seguimiento-section:first-child {
-            border-top: none;
-            padding-top: 0;
-            margin-top: 0;
-        }
     </style>
-</head>
-<body>
+ 
 
 <div class="content" id="content" tabindex="-1">
   <div class="container py-5">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h3 class="mb-0">🎓 Gestión de Estudiantes - Administrador</h3>
-      <!-- Otros botones si los tienes -->
+      <!-- Este botón podría llevar a un modal de registro de usuario si quieres crear estudiantes aquí,
+           o simplemente puedes omitirlo si los estudiantes se registran en otro lugar -->
+      <!-- <button class="btn btn-success rounded-pill px-4" onclick="abrirModalRegistroEstudiante()">
+        <i class="bi bi-plus-circle me-2"></i> Nuevo Estudiante
+      </button> -->
     </div>
 
     <!-- Formulario buscador dinámico -->
@@ -101,7 +90,7 @@ include_once('header.php'); ?>
       </table>
     </div>
 
-    <!-- Paginación (si el backend la soporta) -->
+    <!-- Paginación (si el backend la soporta, de lo contrario, se haría en JS si se carga todo) -->
     <nav aria-label="Paginación de estudiantes" class="mt-4" style="display: none;">
       <ul class="pagination justify-content-center" id="paginacionEstudiantes">
         <!-- Los elementos de paginación se generarían aquí si fuera necesario -->
@@ -147,32 +136,6 @@ include_once('header.php'); ?>
             </div>
         </form>
     </div>
-</div>
-
-<!-- MODAL PARA SEGUIMIENTO ACADÉMICO (Historial Filtrado e Inscripciones Confirmadas) -->
-<div class="modal fade" id="modalSeguimientoAcademico" tabindex="-1" aria-labelledby="modalSeguimientoAcademicoLabel" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content rounded-4 shadow-lg">
-      <div class="modal-header bg-primary text-white rounded-top-3 p-4">
-        <h5 class="modal-title fs-5" id="modalSeguimientoAcademicoLabel">📚 Seguimiento Académico de <span id="seguimientoEstudianteNombre"></span></h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-      </div>
-      <div class="modal-body p-4">
-        <h6 class="text-primary mb-3"><i class="bi bi-card-checklist me-2"></i> Resultados Históricos Clave (No 'Regular')</h6>
-        <div id="historialAcademicoFilteredContent" class="mb-4">
-          <p class="text-center text-muted">Cargando resultados...</p>
-        </div>
-
-        <h6 class="text-primary mb-3 seguimiento-section"><i class="bi bi-bookmark-check-fill me-2"></i> Inscripciones Confirmadas</h6>
-        <div id="inscripcionesConfirmadasContent">
-          <p class="text-center text-muted">Cargando inscripciones...</p>
-        </div>
-      </div>
-      <div class="modal-footer d-flex justify-content-center border-0 p-4 pt-0">
-        <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal"><i class="bi bi-x-circle me-2"></i> Cerrar</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- Modales de Mensaje/Confirmación (reutilizados) -->
@@ -230,14 +193,7 @@ include_once('header.php'); ?>
     const preinscripcionesListContainer = document.getElementById('preinscripcionesList');
     const btnGuardarValidacion = document.getElementById('btnGuardarValidacion');
 
-    // --- Referencias DOM del Modal de Seguimiento Académico ---
-    const modalSeguimientoAcademico = new bootstrap.Modal(document.getElementById('modalSeguimientoAcademico'));
-    const seguimientoEstudianteNombreSpan = document.getElementById('seguimientoEstudianteNombre');
-    const historialAcademicoFilteredContent = document.getElementById('historialAcademicoFilteredContent');
-    const inscripcionesConfirmadasContent = document.getElementById('inscripcionesConfirmadasContent');
-
-
-    // --- Variables de Datos Globales para los Modales ---
+    // --- Variables de Datos Globales para el Modal de Validación ---
     let currentStudentIdToValidate = null;
     let allInscripcionesData = []; // Todas las preinscripciones para el estudiante, año y semestre seleccionados
     let allAniosAcademicos = [];
@@ -336,7 +292,7 @@ include_once('header.php'); ?>
 
         if (allEstudiantesData.length === 0 && !searchTerm) {
             try {
-                const res = await fetch('../api/obtener_estudiantes_para_admin.php');
+                const res = await fetch('../api/obtener_estudiantes_para_admin.php'); // Nueva API para obtener todos los estudiantes del admin
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                 const data = await res.json();
 
@@ -385,11 +341,8 @@ include_once('header.php'); ?>
                   </span>
                 </td>
                 <td class="action-cell">
-                  <button class="btn btn-sm btn-outline-primary rounded-pill px-3 me-1 mb-1" onclick="openValidarInscripcionModal(${estudiante.id_usuario}, '${estudiante.nombre} ${estudiante.apellido}')" title="Validar Inscripciones">
+                  <button class="btn btn-sm btn-outline-primary rounded-pill px-3 me-1" onclick="openValidarInscripcionModal(${estudiante.id_usuario}, '${estudiante.nombre} ${estudiante.apellido}')" title="Validar Inscripciones">
                     <i class="bi bi-check2-square me-1"></i> Validar Insc.
-                  </button>
-                  <button class="btn btn-sm btn-outline-secondary rounded-pill px-3 mb-1" onclick="openSeguimientoAcademicoModal(${estudiante.id_usuario}, '${estudiante.nombre} ${estudiante.apellido}')" title="Ver Seguimiento Académico">
-                    <i class="bi bi-graph-up me-1"></i> Seguimiento
                   </button>
                   <!-- Otros botones de acción si los tienes (editar, cambiar estado) -->
                 </td>
@@ -406,15 +359,15 @@ include_once('header.php'); ?>
         }, 300);
     });
 
-    // --- Lógica del Modal de Validación de Inscripciones (existente) ---
+    // --- Lógica del Modal de Validación de Inscripciones ---
 
     async function openValidarInscripcionModal(studentId, studentName) {
         currentStudentIdToValidate = studentId;
         validarInscripcionEstudianteIdInput.value = studentId;
         validarInscripcionEstudianteNombreSpan.textContent = studentName;
-        formValidarInscripcion.reset();
+        formValidarInscripcion.reset(); // Limpiar el formulario
         preinscripcionesListContainer.innerHTML = '<p class="text-center text-muted">Cargando datos...</p>';
-        btnGuardarValidacion.disabled = true;
+        btnGuardarValidacion.disabled = true; // Deshabilitar hasta que se carguen los datos
 
         try {
             const res = await fetch(`../api/obtener_preinscripciones_para_admin.php?id_estudiante=${studentId}`);
@@ -424,19 +377,24 @@ include_once('header.php'); ?>
             if (data.status) {
                 allAniosAcademicos = data.data.anios_academicos || [];
                 allSemestres = data.data.semestres || [];
-                studentHistorialForValidation = data.data.historial_academico || [];
-                allInscripcionesData = [];
+                studentHistorialForValidation = data.data.historial_academico || []; // Historial del estudiante para el frontend
+                allInscripcionesData = []; // Limpiar antes de poblar con preinscripciones filtradas por select
 
+                // Poblar dropdowns de Año y Semestre
                 populateDropdown(validarInscripcionAnioSelect, allAniosAcademicos, 'id_anio', 'anio', 'Seleccione un año...');
                 populateDropdown(validarInscripcionSemestreSelect, allSemestres, 'id_semestre', 'nombre', 'Seleccione un semestre...');
 
+                // Preseleccionar el año académico actual del estudiante si está disponible
                 if (data.data.current_academic_year_id) {
                     validarInscripcionAnioSelect.value = data.data.current_academic_year_id;
                 }
 
+                // Cargar las preinscripciones por primera vez (si hay año y semestre preseleccionados o el primero de cada)
+                // Usar un evento 'change' simulado para cargar las inscripciones iniciales
                 if (validarInscripcionAnioSelect.value && validarInscripcionSemestreSelect.value) {
                      loadPreinscripcionesForPeriod(validarInscripcionAnioSelect.value, validarInscripcionSemestreSelect.value, data.data.preinscripciones);
                 } else if (allAniosAcademicos.length > 0 && allSemestres.length > 0) {
+                    // Seleccionar el primer año y semestre por defecto si no hay uno actual
                     validarInscripcionAnioSelect.value = allAniosAcademicos[0].id_anio;
                     validarInscripcionSemestreSelect.value = allSemestres[0].id_semestre;
                     loadPreinscripcionesForPeriod(allAniosAcademicos[0].id_anio, allSemestres[0].id_semestre, data.data.preinscripciones);
@@ -444,7 +402,7 @@ include_once('header.php'); ?>
                     preinscripcionesListContainer.innerHTML = '<p class="text-center text-muted">No hay años o semestres disponibles para cargar inscripciones.</p>';
                 }
 
-                btnGuardarValidacion.disabled = false;
+                btnGuardarValidacion.disabled = false; // Habilitar el botón
             } else {
                 mostrarMensajeModal('Error al cargar datos del modal de validación: ' + (data.message || 'Datos inválidos.'));
                 console.error("Error al cargar obtener_preinscripciones_para_admin:", data.message || data);
@@ -457,6 +415,9 @@ include_once('header.php'); ?>
         }
     }
 
+    /**
+     * Helper para poblar dropdowns.
+     */
     function populateDropdown(selectElement, data, valueKey, textKey, defaultOptionText) {
         selectElement.innerHTML = `<option value="">${defaultOptionText}</option>`;
         data.forEach(item => {
@@ -467,29 +428,36 @@ include_once('header.php'); ?>
         });
     }
 
+    /**
+     * Carga y renderiza las preinscripciones para el año y semestre seleccionados.
+     * @param {number} anioId - ID del año académico.
+     * @param {number} semestreId - ID del semestre.
+     * @param {Array} initialPreinscripciones - Opcional, datos de preinscripciones iniciales para no hacer otra llamada.
+     */
     async function loadPreinscripcionesForPeriod(anioId, semestreId, initialPreinscripciones = null) {
         preinscripcionesListContainer.innerHTML = '<p class="text-center text-muted">Cargando preinscripciones...</p>';
-        allInscripcionesData = [];
+        allInscripcionesData = []; // Resetear
 
         try {
             let dataToProcess = initialPreinscripciones;
-            if (!dataToProcess) {
+            if (!dataToProcess) { // Si no se pasaron datos iniciales, hacer una nueva llamada
                 const res = await fetch(`../api/obtener_preinscripciones_para_admin.php?id_estudiante=${currentStudentIdToValidate}&id_anio=${anioId}&id_semestre=${semestreId}`);
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                 const data = await res.json();
                 if (data.status && Array.isArray(data.data.preinscripciones)) {
                     dataToProcess = data.data.preinscripciones;
-                    studentHistorialForValidation = data.data.historial_academico || [];
+                    studentHistorialForValidation = data.data.historial_academico || []; // Actualizar historial si se hace nueva llamada
                 } else {
                     preinscripcionesListContainer.innerHTML = '<p class="text-center text-danger">Error al cargar preinscripciones: ' + (data.message || 'Datos inválidos.') + '</p>';
                     console.error("Error o formato de datos incorrecto al cargar preinscripciones:", data.message || data);
                     return;
                 }
             } else {
+                // Filtrar las inscripciones iniciales para el periodo seleccionado
                 dataToProcess = dataToProcess.filter(insc => insc.id_anio == anioId && insc.id_semestre == semestreId);
             }
 
-            allInscripcionesData = dataToProcess;
+            allInscripcionesData = dataToProcess; // Cachear para el envío del formulario
             renderPreinscripcionesTable(allInscripcionesData);
 
         } catch (err) {
@@ -498,8 +466,11 @@ include_once('header.php'); ?>
         }
     }
 
+    /**
+     * Renderiza la tabla de preinscripciones en el modal.
+     */
     function renderPreinscripcionesTable(inscripciones) {
-        preinscripcionesListContainer.innerHTML = '';
+        preinscripcionesListContainer.innerHTML = ''; // Limpiar
 
         if (inscripciones.length === 0) {
             preinscripcionesListContainer.innerHTML = '<p class="text-center text-muted">No hay preinscripciones para el año y semestre seleccionados.</p>';
@@ -529,6 +500,7 @@ include_once('header.php'); ?>
                 h.id_asignatura == insc.id_asignatura && h.resultado === 'aprobado'
             );
 
+            // Determinar la clase de la fila basada en el estado de la inscripción
             let rowClass = '';
             if (insc.estado === 'confirmado') {
                 rowClass = 'confirmed';
@@ -557,6 +529,7 @@ include_once('header.php'); ?>
                         <select name="inscripciones[${insc.id_inscripcion}][resultado_historial]" class="form-select form-select-sm resultado-historial-select" data-inscripcion-id="${insc.id_inscripcion}">
                             <option value="">No aplica</option>
                             <option value="aprobado" ${isAlreadyApproved && !isAlreadyConvalidated ? 'selected' : ''} ${isAlreadyApproved && !isAlreadyConvalidated ? 'disabled' : ''}>Aprobado</option>
+                            <option value="regular">Regular</option>
                             <option value="reprobado">Reprobado</option>
                             <option value="abandono">Abandono</option>
                             <option value="convalidado" ${isAlreadyConvalidated ? 'selected' : ''}>Convalidado</option>
@@ -574,6 +547,7 @@ include_once('header.php'); ?>
         tableHtml += `</tbody></table>`;
         preinscripcionesListContainer.innerHTML = tableHtml;
 
+        // Adjuntar event listeners para los selects de resultado_historial
         document.querySelectorAll('.resultado-historial-select').forEach(select => {
             select.addEventListener('change', (event) => {
                 const row = event.target.closest('tr');
@@ -581,22 +555,28 @@ include_once('header.php'); ?>
                 const observacionTextarea = row.querySelector('textarea[name*="[observacion]"]');
                 const selectedResult = event.target.value;
 
-                if (selectedResult === 'convalidado' || selectedResult === 'aprobado' || selectedResult === 'reprobado') {
+                if (selectedResult === 'convalidado') {
                     notaInput.disabled = false;
                     observacionTextarea.disabled = false;
-                    if (selectedResult === 'convalidado' && notaInput.value === '') notaInput.value = '100.00';
-                    if (selectedResult === 'convalidado' && observacionTextarea.value === '') observacionTextarea.value = 'Convalidado por equivalencia.';
-
-                } else {
-                    notaInput.disabled = true;
+                    // Opcional: prellenar nota si es convalidado (ej. 100)
+                    if (notaInput.value === '') notaInput.value = '100.00';
+                    if (observacionTextarea.value === '') observacionTextarea.value = 'Convalidado por equivalencia.';
+                } else if (selectedResult === 'aprobado' || selectedResult === 'reprobado') {
+                    notaInput.disabled = false;
                     observacionTextarea.disabled = false;
-                    notaInput.value = '';
+                }
+                else { // No aplica, Abandono, etc.
+                    notaInput.disabled = true;
+                    observacionTextarea.disabled = false; // Observación puede seguir siendo útil
+                    notaInput.value = ''; // Limpiar nota si no aplica
                 }
             });
+            // Disparar el evento change al renderizar para aplicar el estado inicial
             select.dispatchEvent(new Event('change'));
         });
     }
 
+    // Event listeners para los selects de Año y Semestre en el modal de validación
     validarInscripcionAnioSelect.addEventListener('change', () => {
         const anioId = validarInscripcionAnioSelect.value;
         const semestreId = validarInscripcionSemestreSelect.value;
@@ -617,6 +597,7 @@ include_once('header.php'); ?>
         }
     });
 
+    // --- Lógica de Envío del Formulario de Validación ---
     formValidarInscripcion.addEventListener('submit', async e => {
         e.preventDefault();
 
@@ -625,6 +606,7 @@ include_once('header.php'); ?>
             btnGuardarValidacion.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Guardando...';
 
             const formData = new FormData(formValidarInscripcion);
+            // Incluir el ID del estudiante manualmente
             formData.append('id_estudiante', currentStudentIdToValidate);
 
             try {
@@ -638,7 +620,7 @@ include_once('header.php'); ?>
                 if (data.status) {
                     mostrarMensajeModal(data.message, () => {
                         modalValidarInscripcion.hide();
-                        cargarEstudiantes();
+                        cargarEstudiantes(); // Recargar la tabla principal de estudiantes
                     });
                 } else {
                     mostrarMensajeModal('Error al guardar validaciones: ' + (data.message || 'Error desconocido.'));
@@ -654,124 +636,6 @@ include_once('header.php'); ?>
         });
     });
 
-    // --- NUEVA Lógica del Modal de Seguimiento Académico ---
-
-    /**
-     * Abre el modal de seguimiento académico y carga los datos.
-     * @param {number} studentId - ID del estudiante.
-     * @param {string} studentName - Nombre completo del estudiante.
-     */
-    async function openSeguimientoAcademicoModal(studentId, studentName) {
-        seguimientoEstudianteNombreSpan.textContent = studentName;
-        historialAcademicoFilteredContent.innerHTML = '<p class="text-center text-muted">Cargando resultados históricos...</p>';
-        inscripcionesConfirmadasContent.innerHTML = '<p class="text-center text-muted">Cargando inscripciones confirmadas...</p>';
-
-        try {
-            const res = await fetch(`../api/obtener_seguimiento_academico.php?id_estudiante=${studentId}`);
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            const data = await res.json();
-
-            if (data.status && data.data) {
-                renderHistorialAcademicoFiltered(data.data.historial_filtrado);
-                renderInscripcionesConfirmadas(data.data.inscripciones_confirmadas);
-            } else {
-                historialAcademicoFilteredContent.innerHTML = '<p class="text-center text-danger">Error al cargar historial: ' + (data.message || 'Datos inválidos.') + '</p>';
-                inscripcionesConfirmadasContent.innerHTML = '<p class="text-center text-danger">Error al cargar inscripciones: ' + (data.message || 'Datos inválidos.') + '</p>';
-                console.error("Error al cargar seguimiento académico:", data.message || data);
-            }
-        } catch (err) {
-            historialAcademicoFilteredContent.innerHTML = '<p class="text-center text-danger">Error de conexión al cargar el seguimiento.</p>';
-            inscripcionesConfirmadasContent.innerHTML = '<p class="text-center text-danger">Error de conexión al cargar el seguimiento.</p>';
-            console.error("Error de conexión al obtener seguimiento académico:", err);
-        } finally {
-            modalSeguimientoAcademico.show();
-        }
-    }
-
-    /**
-     * Renderiza la tabla de resultados históricos filtrados.
-     * @param {Array} historial - Array de objetos del historial académico filtrado.
-     */
-    function renderHistorialAcademicoFiltered(historial) {
-        if (historial.length === 0) {
-            historialAcademicoFilteredContent.innerHTML = '<p class="text-center text-muted">No hay resultados históricos (distintos de "regular") para mostrar.</p>';
-            return;
-        }
-
-        let tableHtml = `
-            <table class="table table-striped table-hover table-sm">
-                <thead class="table-light">
-                    <tr>
-                        <th>Año</th>
-                        <th>Asignatura</th>
-                        <th>Resultado</th>
-                        <th>Nota</th>
-                        <th>Observación</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        historial.forEach(item => {
-            const resultBadgeClass = {
-                'aprobado': 'bg-success',
-                'reprobado': 'bg-danger',
-                'abandono': 'bg-warning text-dark',
-                'convalidado': 'bg-info'
-            }[item.resultado] || 'bg-secondary';
-
-            tableHtml += `
-                <tr>
-                    <td>${item.anio_academico || 'N/A'}</td>
-                    <td>${item.asignatura_nombre || 'N/A'}</td>
-                    <td><span class="badge ${resultBadgeClass}">${item.resultado || 'N/A'}</span></td>
-                    <td>${item.nota_final !== null ? item.nota_final : '-'}</td>
-                    <td class="small text-break-word">${item.observacion || 'Ninguna'}</td>
-                </tr>
-            `;
-        });
-        tableHtml += `</tbody></table>`;
-        historialAcademicoFilteredContent.innerHTML = tableHtml;
-    }
-
-    /**
-     * Renderiza la tabla de inscripciones confirmadas.
-     * @param {Array} inscripciones - Array de objetos de inscripciones confirmadas.
-     */
-    function renderInscripcionesConfirmadas(inscripciones) {
-        if (inscripciones.length === 0) {
-            inscripcionesConfirmadasContent.innerHTML = '<p class="text-center text-muted">No hay inscripciones confirmadas para mostrar.</p>';
-            return;
-        }
-
-        let tableHtml = `
-            <table class="table table-striped table-hover table-sm">
-                <thead class="table-light">
-                    <tr>
-                        <th>Año</th>
-                        <th>Semestre</th>
-                        <th>Asignatura</th>
-                        <th>Tipo</th>
-                        <th>Fecha Insc.</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        inscripciones.forEach(item => {
-            tableHtml += `
-                <tr>
-                    <td>${item.anio_academico || 'N/A'}</td>
-                    <td>${item.semestre_nombre || 'N/A'}</td>
-                    <td>${item.asignatura_nombre || 'N/A'}</td>
-                    <td><span class="badge bg-primary">${item.tipo || 'regular'}</span></td>
-                    <td>${new Date(item.fecha_inscripcion).toLocaleDateString()}</td>
-                </tr>
-            `;
-        });
-        tableHtml += `</tbody></table>`;
-        inscripcionesConfirmadasContent.innerHTML = tableHtml;
-    }
-
-
     // Carga inicial de estudiantes al cargar la página
     document.addEventListener('DOMContentLoaded', () => {
         cargarEstudiantes();
@@ -779,4 +643,3 @@ include_once('header.php'); ?>
 
 </script>
 <?php include_once('footer.php'); ?>
-

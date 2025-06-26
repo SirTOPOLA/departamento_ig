@@ -6,12 +6,12 @@ if(session_status() == PHP_SESSION_NONE){
  
 require '../includes/conexion.php';
 
-$usuario = trim($_POST['email'] ?? '');
+$usuario = trim($_POST['usuario'] ?? '');
 $contrasena = $_POST['contrasena'] ?? '';
 
 if (empty($usuario) || empty($contrasena)) {
     $_SESSION['error'] = 'Debe ingresar ambos campos.';
-    header("Location: ../login.php");
+    header("Location: ../index.php");
     exit;
 }
 
@@ -40,5 +40,5 @@ if ($usuarioDB && password_verify($contrasena, $usuarioDB['contrasena'])) {
     }
 } else {
     $_SESSION['error'] = 'Credenciales incorrectas o usuario inactivo.';
-    header("Location: ../login.php");
+    header("Location: ../index.php");
 }

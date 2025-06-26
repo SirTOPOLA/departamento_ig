@@ -1,85 +1,65 @@
 <?php
-session_start();
-if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'profesor') {
-    http_response_code(403);
-    exit('Acceso no autorizado.');
-}
+header('Content-Type: application/json');
 
-require '../includes/conexion.php';
-
-$id_profesor = $_SESSION['id_usuario'] ?? null;
-if (!$id_profesor) {
-    exit("Error: Profesor no identificado.");
-}
+$response = ['status' => false, 'message' => ''];
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    exit('Método no permitido.');
+    $response['message'] = 'Método no permitido.';
+    echo json_encode($response);
+    exit();
 }
 
-// Sanitizar y validar inputs
-$asignatura_id = isset($_POST['asignatura_id']) ? intval($_POST['asignatura_id']) : null;
-$parcial_1 = $_POST['parcial_1'] ?? [];
-$parcial_2 = $_POST['parcial_2'] ?? [];
-$examen_final = $_POST['examen_final'] ?? [];
-$observaciones = $_POST['observaciones'] ?? [];
+// Ruta al archivo de log donde se guardarán las notas.
+// Asegúrate de que la carpeta 'data' exista y tenga permisos de escritura para el servidor web.
+$logFilePath = 'logs/log.txt';
 
-if (!$asignatura_id || !is_array($parcial_1)) {
-    exit("Datos incompletos o inválidos.");
+// Recoger los datos de la nota del POST
+$id_inscripcion = filter_input(INPUT_POST, 'id_inscripcion', FILTER_VALIDATE_INT);
+$parcial_1 = filter_input(INPUT_POST, 'parcial_1', FILTER_VALIDATE_FLOAT);
+$parcial_2 = filter_input(INPUT_POST, 'parcial_2', FILTER_VALIDATE_FLOAT);
+$examen_final = filter_input(INPUT_POST, 'examen_final', FILTER_VALIDATE_FLOAT);
+$observaciones = filter_input(INPUT_POST, 'observaciones', FILTER_SANITIZE_STRING);
+
+// Convertir notas vacías a NULL para el log (o simplemente dejarlas como string vacío si prefieres)
+$parcial_1 = $parcial_1 !== false ? $parcial_1 : null;
+$parcial_2 = $parcial_2 !== false ? $parcial_2 : null;
+$examen_final = $examen_final !== false ? $examen_final : null;
+$observaciones = $observaciones ?: ''; // Si es nulo, convertir a string vacío
+
+if (!$id_inscripcion) {
+    $response['message'] = 'ID de inscripción no proporcionado o inválido.';
+    echo json_encode($response);
+    exit();
 }
 
-// Verificar existencia de carpeta
-$logDir = "logs";
-if (!is_dir($logDir)) {
-    if (!mkdir($logDir, 0775, true)) {
-        exit("Error: No se pudo crear el directorio de logs.");
-    }
+// Crear un array asociativo con los datos de la nota para guardarlos en formato JSON
+$noteData = [
+    'timestamp'      => date('Y-m-d H:i:s'),
+    'id_inscripcion'  => $id_inscripcion,
+    'parcial_1'      => $parcial_1,
+    'parcial_2'      => $parcial_2,
+    'examen_final'   => $examen_final,
+    'observaciones'  => $observaciones
+];
+
+// Convertir el array a una cadena JSON
+$logEntry = json_encode($noteData);
+
+// Asegúrate de que la carpeta 'data' exista
+if (!is_dir(dirname($logFilePath))) {
+    mkdir(dirname($logFilePath), 0775, true); // Crea el directorio con permisos recursivamente
 }
 
-// Verificar existencia o crearlo
-$logPath = "$logDir/log.txt";
-if (!file_exists($logPath)) {
-    if (!touch($logPath)) {
-        exit("Error: No se pudo crear el archivo de log.");
-    }
+// Intentar escribir la línea en el archivo de log.
+// FILE_APPEND: Añade al final del archivo.
+// LOCK_EX: Bloquea el archivo durante la escritura para evitar condiciones de carrera.
+if (file_put_contents($logFilePath, $logEntry . PHP_EOL, FILE_APPEND | LOCK_EX) !== false) {
+    $response['status'] = true;
+    $response['message'] = 'Notas guardadas en el log exitosamente.';
+} else {
+    $response['message'] = 'Error al escribir las notas en el archivo de log. Verifique permisos.';
+    error_log("Error al escribir en log.txt: No se pudo escribir en {$logFilePath}");
 }
 
-// Verificar permisos de escritura
-if (!is_writable($logPath)) {
-    exit("Error: El archivo de log no tiene permisos de escritura.");
-}
-
-// Abrir el archivo de log
-$logFile = fopen($logPath, "a");
-if (!$logFile) {
-    exit("Error: No se pudo abrir el archivo de log.");
-}
-
-$timestamp = date("Y-m-d H:i:s");
-fwrite($logFile, "\n--- REGISTRO DE NOTAS POR PROFESOR (ID: $id_profesor) - $timestamp ---\n");
-
-foreach ($parcial_1 as $id_estudiante => $nota1) {
-    $nota1 = is_numeric($nota1) ? round($nota1, 2) : null;
-    $nota2 = isset($parcial_2[$id_estudiante]) && is_numeric($parcial_2[$id_estudiante]) ? round($parcial_2[$id_estudiante], 2) : null;
-    $final = isset($examen_final[$id_estudiante]) && is_numeric($examen_final[$id_estudiante]) ? round($examen_final[$id_estudiante], 2) : null;
-    $obs = trim($observaciones[$id_estudiante] ?? '');
-
-    // Validar rango de notas (0 a 10)
-    foreach ([$nota1, $nota2, $final] as $n) {
-        if (!is_null($n) && ($n < 0 || $n > 10)) {
-            fwrite($logFile, "❌ ERROR: Nota fuera de rango para estudiante $id_estudiante. P1:$nota1 P2:$nota2 Final:$final\n");
-            continue 2;
-        }
-    }
-
-    // Escribir registro válido en el log
-    $logID = uniqid("REG-");
-    $linea = "$logID | estudiante:$id_estudiante | asignatura:$asignatura_id | p1:$nota1 | p2:$nota2 | final:$final | obs: $obs\n";
-    fwrite($logFile, $linea);
-}
-
-fclose($logFile);
-
-// Redirección o respuesta
-header("Location: ../profesor/notas.php?asignatura_id=" . urlencode($asignatura_id) . "&mensaje=notas_guardadas_en_log");
-exit;
+echo json_encode($response);
+?>

@@ -197,7 +197,7 @@ CREATE TABLE `historial_academico` (
   `id` int(11) NOT NULL,
   `id_estudiante` int(11) NOT NULL,
   `id_asignatura` int(11) NOT NULL,
-  `resultado` enum('aprobado','reprobado','abandono','convalidado') NOT NULL,
+  `resultado` enum('regular','aprobado','reprobado','abandono','convalidado') NOT NULL,
   `nota_final` decimal(5,2) DEFAULT NULL,
   `id_anio` int(11) DEFAULT NULL,
   `observacion` text DEFAULT NULL,

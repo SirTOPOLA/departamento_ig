@@ -1,45 +1,56 @@
 <?php
+header('Content-Type: application/json');
 require_once '../includes/conexion.php';
 
+$response = ['status' => false, 'message' => '', 'data' => null];
+
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
-  http_response_code(400);
-  echo json_encode(['error' => 'ID inválido']);
-  exit;
+    $response['message'] = 'ID de usuario no proporcionado o inválido.';
+    echo json_encode($response);
+    exit();
 }
 
-$id = intval($_GET['id']);
+$id_usuario = intval($_GET['id']);
 
 try {
-  $stmt = $pdo->prepare("SELECT * FROM usuarios WHERE id_usuario = ?");
-  $stmt->execute([$id]);
-  $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($pdo instanceof PDO) {
+        // Consulta principal con LEFT JOIN según el rol del usuario
+        $stmt = $pdo->prepare("
+            SELECT 
+                u.id_usuario, u.nombre, u.apellido, u.email, u.dni, u.direccion,
+                u.telefono, u.rol,
+                est.matricula,
+                ce.id_curso,
+                ce.id_anio AS id_anio_academico,
+                prof.especialidad
+            FROM usuarios u
+            LEFT JOIN estudiantes est ON u.id_usuario = est.id_estudiante
+            LEFT JOIN curso_estudiante ce ON est.id_estudiante = ce.id_estudiante 
+                AND ce.estado = 'activo'
+            LEFT JOIN profesores prof ON u.id_usuario = prof.id_profesor
+            WHERE u.id_usuario = :id_usuario
+            LIMIT 1
+        ");
+        $stmt->bindParam(':id_usuario', $id_usuario, PDO::PARAM_INT);
+        $stmt->execute();
 
-  if (!$usuario) {
-    http_response_code(404);
-    echo json_encode(['error' => 'Usuario no encontrado']);
-    exit;
-  }
+        $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
-  // Si es profesor, obtener especialidad
-  if ($usuario['rol'] === 'profesor') {
-    $extra = $pdo->prepare("SELECT especialidad FROM profesores WHERE id_profesor = ?");
-    $extra->execute([$id]);
-    $profesor = $extra->fetch(PDO::FETCH_ASSOC);
-    $usuario['especialidad'] = $profesor['especialidad'] ?? '';
-  }
-
-  // Si es estudiante, obtener matrícula y curso
-  if ($usuario['rol'] === 'estudiante') {
-    $extra = $pdo->prepare("SELECT matricula, curso_actual FROM estudiantes WHERE id_estudiante = ?");
-    $extra->execute([$id]);
-    $estudiante = $extra->fetch(PDO::FETCH_ASSOC);
-    $usuario['matricula'] = $estudiante['matricula'] ?? '';
-    $usuario['curso_actual'] = $estudiante['curso_actual'] ?? '';
-  }
-
-  echo json_encode($usuario);
+        if ($usuario) {
+            $response['status'] = true;
+            $response['data'] = $usuario;
+        } else {
+            $response['message'] = 'Usuario no encontrado.';
+        }
+    } else {
+        $response['message'] = 'Conexión a la base de datos no válida.';
+    }
 } catch (PDOException $e) {
-  http_response_code(500);
-  echo json_encode(['error' => 'Error al obtener datos']);
+    $response['message'] = 'Error de base de datos: ' . $e->getMessage();
+    error_log("Error PDO en obtener_usuario.php: " . $e->getMessage());
+} catch (Exception $e) {
+    $response['message'] = 'Error inesperado: ' . $e->getMessage();
+    error_log("Error general en obtener_usuario.php: " . $e->getMessage());
 }
-?>
+
+echo json_encode($response);
