@@ -2,9 +2,9 @@
 <?php
 require_once '../includes/conexion.php';
 
-// Obtener todos los periodos académicos
-$stmtPeriodos = $pdo->query("SELECT * FROM periodos_academicos ORDER BY fecha_inicio DESC");
-$periodos = $stmtPeriodos->fetchAll(PDO::FETCH_ASSOC);
+// Obtener todos los años académicos
+$stmtAnios = $pdo->query("SELECT * FROM anios_academicos ORDER BY anio DESC");
+$anios = $stmtAnios->fetchAll(PDO::FETCH_ASSOC);
 
 // Obtener todas las configuraciones de horarios
 $stmtConfig = $pdo->query("SELECT * FROM configuracion_horarios ORDER BY FIELD(dia_semana, 'Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Default')");
@@ -17,8 +17,8 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
 
         <ul class="nav nav-tabs mb-4" id="configTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="periodos-tab" data-bs-toggle="tab" data-bs-target="#periodos" type="button" role="tab" aria-controls="periodos" aria-selected="true">
-                    Períodos Académicos
+                <button class="nav-link active" id="anios-tab" data-bs-toggle="tab" data-bs-target="#anios" type="button" role="tab" aria-controls="anios" aria-selected="true">
+                    Años Académicos
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -29,17 +29,18 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
         </ul>
 
         <div class="tab-content" id="configTabsContent">
-            <div class="tab-pane fade show active" id="periodos" role="tabpanel" aria-labelledby="periodos-tab">
+            <!-- Pestaña de Años Académicos -->
+            <div class="tab-pane fade show active" id="anios" role="tabpanel" aria-labelledby="anios-tab">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4>Gestión de Períodos Académicos</h4>
-                    <button class="btn btn-success" onclick="abrirModalPeriodo()"><i class="bi bi-plus-circle"></i> Nuevo Período</button>
+                    <h4>Gestión de Años Académicos</h4>
+                    <button class="btn btn-success" onclick="abrirModalAnio()"><i class="bi bi-plus-circle"></i> Nuevo Año</button>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-striped align-middle">
                         <thead class="table-info">
                             <tr>
                                 <th>#</th>
-                                <th>Nombre</th>
+                                <th>Año</th>
                                 <th>Inicio</th>
                                 <th>Fin</th>
                                 <th>Activo</th>
@@ -47,35 +48,35 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($periodos as $p): ?>
+                            <?php foreach ($anios as $a): ?>
                                 <tr>
-                                    <td><?= $p['id_periodo'] ?></td>
-                                    <td><?= htmlspecialchars($p['nombre_periodo']) ?></td>
-                                    <td><?= date('d/m/Y', strtotime($p['fecha_inicio'])) ?></td>
-                                    <td><?= date('d/m/Y', strtotime($p['fecha_fin'])) ?></td>
+                                    <td><?= $a['id_anio'] ?></td>
+                                    <td><?= htmlspecialchars($a['anio']) ?></td>
+                                    <td><?= date('d/m/Y', strtotime($a['fecha_inicio'])) ?></td>
+                                    <td><?= date('d/m/Y', strtotime($a['fecha_fin'])) ?></td>
                                     <td>
-                                        <span class="badge bg-<?= $p['activo'] ? 'success' : 'secondary' ?>">
-                                            <?= $p['activo'] ? 'Sí' : 'No' ?>
+                                        <span class="badge bg-<?= $a['activo'] ? 'success' : 'secondary' ?>">
+                                            <?= $a['activo'] ? 'Sí' : 'No' ?>
                                         </span>
                                     </td>
                                     <td>
-                                        <button class="btn btn-warning btn-sm" onclick="editarPeriodo(<?= $p['id_periodo'] ?>)">
+                                        <button class="btn btn-warning btn-sm" onclick="editarAnio(<?= $a['id_anio'] ?>)">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
-                                        <button class="btn btn-danger btn-sm" onclick="eliminarPeriodo(<?= $p['id_periodo'] ?>)">
+                                        <button class="btn btn-danger btn-sm" onclick="eliminarAnio(<?= $a['id_anio'] ?>)">
                                             <i class="bi bi-trash"></i>
                                         </button>
-                                        <?php if (!$p['activo']): ?>
-                                            <button class="btn btn-primary btn-sm" onclick="activarPeriodo(<?= $p['id_periodo'] ?>)">
+                                        <?php if (!$a['activo']): ?>
+                                            <button class="btn btn-primary btn-sm" onclick="activarAnio(<?= $a['id_anio'] ?>)">
                                                 <i class="bi bi-check-circle"></i> Activar
                                             </button>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (count($periodos) === 0): ?>
+                            <?php if (count($anios) === 0): ?>
                                 <tr>
-                                    <td colspan="6" class="text-center">No hay períodos académicos registrados.</td>
+                                    <td colspan="6" class="text-center">No hay años académicos registrados.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
@@ -83,10 +84,12 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
+            <!-- Pestaña de Reglas por Día -->
             <div class="tab-pane fade" id="reglas" role="tabpanel" aria-labelledby="reglas-tab">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h4>Reglas de Horarios por Día</h4>
-                    </div>
+                    <!-- No se añade 'Nuevo' aquí, se editan los existentes -->
+                </div>
                 <div class="table-responsive">
                     <table class="table table-striped align-middle">
                         <thead class="table-info">
@@ -131,31 +134,32 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
-<div class="modal fade" id="modalPeriodo" tabindex="-1">
+<!-- Modal para Nuevo / Editar Año Académico -->
+<div class="modal fade" id="modalAnio" tabindex="-1">
     <div class="modal-dialog">
-        <form class="modal-content" id="formPeriodo">
+        <form class="modal-content" id="formAnio">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Nuevo / Editar Período Académico</h5>
+                <h5 class="modal-title">Nuevo / Editar Año Académico</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <input type="hidden" name="id_periodo" id="periodo_id">
+                <input type="hidden" name="id_anio" id="anio_id">
                 <div class="mb-2">
-                    <label class="form-label">Nombre del Período</label>
-                    <input type="text" name="nombre_periodo" id="periodo_nombre" class="form-control" required>
+                    <label class="form-label">Año</label>
+                    <input type="text" name="anio" id="anio_nombre" class="form-control" required placeholder="Ej: 2024-2025">
                 </div>
                 <div class="mb-2">
                     <label class="form-label">Fecha de Inicio</label>
-                    <input type="date" name="fecha_inicio" id="periodo_fecha_inicio" class="form-control" required>
+                    <input type="date" name="fecha_inicio" id="anio_fecha_inicio" class="form-control" required>
                 </div>
                 <div class="mb-2">
                     <label class="form-label">Fecha de Fin</label>
-                    <input type="date" name="fecha_fin" id="periodo_fecha_fin" class="form-control" required>
+                    <input type="date" name="fecha_fin" id="anio_fecha_fin" class="form-control" required>
                 </div>
                 <div class="form-check mb-2">
-                    <input class="form-check-input" type="checkbox" name="activo" id="periodo_activo">
-                    <label class="form-check-label" for="periodo_activo">
-                        Activo (solo un período puede estar activo a la vez)
+                    <input class="form-check-input" type="checkbox" name="activo" id="anio_activo">
+                    <label class="form-check-label" for="anio_activo">
+                        Activo (solo un año puede estar activo a la vez)
                     </label>
                 </div>
             </div>
@@ -167,6 +171,7 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
+<!-- Modal para Editar Configuración de Horario por Día -->
 <div class="modal fade" id="modalConfiguracion" tabindex="-1">
     <div class="modal-dialog">
         <form class="modal-content" id="formConfiguracion">
@@ -229,6 +234,7 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 
+<!-- Custom Alert/Message Box (Duplicado para este archivo, considera un archivo JS común) -->
 <div class="modal fade" id="customAlertModal" tabindex="-1" aria-labelledby="customAlertModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -237,7 +243,8 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="customAlertModalBody">
-                </div>
+                <!-- Message will be inserted here -->
+            </div>
             <div class="modal-footer" id="customAlertModalFooter">
                 <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Aceptar</button>
             </div>
@@ -247,8 +254,8 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const modalPeriodo = new bootstrap.Modal(document.getElementById('modalPeriodo'));
-    const formPeriodo = document.getElementById('formPeriodo');
+    const modalAnio = new bootstrap.Modal(document.getElementById('modalAnio')); // Cambio: modalAnio
+    const formAnio = document.getElementById('formAnio'); // Cambio: formAnio
     const modalConfiguracion = new bootstrap.Modal(document.getElementById('modalConfiguracion'));
     const formConfiguracion = document.getElementById('formConfiguracion');
     const customAlertModal = new bootstrap.Modal(document.getElementById('customAlertModal'));
@@ -319,41 +326,41 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
         });
     }
 
-    // --- Funciones para Períodos Académicos ---
-    function abrirModalPeriodo() {
-        formPeriodo.reset();
-        formPeriodo.periodo_id.value = '';
-        document.getElementById('periodo_activo').checked = false; // Desmarcar por defecto
-        modalPeriodo.show();
+    // --- Funciones para Años Académicos --- // Cambio: Años Académicos
+    function abrirModalAnio() { // Cambio: abrirModalAnio
+        formAnio.reset(); // Cambio: formAnio
+        formAnio.anio_id.value = ''; // Cambio: anio_id
+        document.getElementById('anio_activo').checked = false; // Cambio: anio_activo
+        modalAnio.show(); // Cambio: modalAnio
     }
 
-    async function editarPeriodo(id) {
+    async function editarAnio(id) { // Cambio: editarAnio
         try {
-            const response = await fetch(`../api/periodos_academicos_crud.php?id=${id}`);
+            const response = await fetch(`../api/anios_academicos_crud.php?id=${id}`); // Cambio: anios_academicos_crud.php
             const d = await response.json();
-            if (d.status && d.periodo) {
-                const p = d.periodo;
-                formPeriodo.periodo_id.value = p.id_periodo;
-                document.getElementById('periodo_nombre').value = p.nombre_periodo;
-                document.getElementById('periodo_fecha_inicio').value = p.fecha_inicio;
-                document.getElementById('periodo_fecha_fin').value = p.fecha_fin;
-                document.getElementById('periodo_activo').checked = (p.activo == 1);
-                modalPeriodo.show();
+            if (d.status && d.anio) { // Cambio: d.anio
+                const a = d.anio; // Cambio: a = d.anio
+                formAnio.anio_id.value = a.id_anio; // Cambio: anio_id, a.id_anio
+                document.getElementById('anio_nombre').value = a.anio; // Cambio: anio_nombre, a.anio
+                document.getElementById('anio_fecha_inicio').value = a.fecha_inicio; // Cambio: anio_fecha_inicio
+                document.getElementById('anio_fecha_fin').value = a.fecha_fin; // Cambio: anio_fecha_fin
+                document.getElementById('anio_activo').checked = (a.activo == 1); // Cambio: anio_activo, a.activo
+                modalAnio.show(); // Cambio: modalAnio
             } else {
-                showCustomMessage("Error al obtener datos del período: " + (d.message || "Desconocido"));
+                showCustomMessage("Error al obtener datos del año académico: " + (d.message || "Desconocido")); // Cambio: año académico
             }
         } catch (error) {
-            console.error("Error de red al editar período:", error);
-            showCustomMessage("Error de red al editar el período.");
+            console.error("Error de red al editar año académico:", error); // Cambio: año académico
+            showCustomMessage("Error de red al editar el año académico."); // Cambio: año académico
         }
     }
 
-    async function eliminarPeriodo(id) {
-        const confirmed = await showCustomMessage("¿Está seguro de que desea eliminar este período? Esto podría afectar horarios asociados.", true);
+    async function eliminarAnio(id) { // Cambio: eliminarAnio
+        const confirmed = await showCustomMessage("¿Está seguro de que desea eliminar este año académico? Esto podría afectar horarios asociados.", true); // Cambio: año académico
         if (!confirmed) return;
 
         try {
-            const response = await fetch(`../api/periodos_academicos_crud.php?action=delete&id=${id}`);
+            const response = await fetch(`../api/anios_academicos_crud.php?action=delete&id=${id}`); // Cambio: anios_academicos_crud.php
             const r = await response.json();
             if (r.status) {
                 showCustomMessage(r.message).then(() => location.reload());
@@ -361,17 +368,17 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
                 showCustomMessage("Error: " + r.message);
             }
         } catch (error) {
-            console.error("Error de red al eliminar período:", error);
-            showCustomMessage("Error de red al eliminar el período.");
+            console.error("Error de red al eliminar año académico:", error); // Cambio: año académico
+            showCustomMessage("Error de red al eliminar el año académico."); // Cambio: año académico
         }
     }
 
-    async function activarPeriodo(id) {
-        const confirmed = await showCustomMessage("Al activar este período, cualquier otro período activo será desactivado. ¿Desea continuar?", true);
+    async function activarAnio(id) { // Cambio: activarAnio
+        const confirmed = await showCustomMessage("Al activar este año académico, cualquier otro año activo será desactivado. ¿Desea continuar?", true); // Cambio: año académico
         if (!confirmed) return;
 
         try {
-            const response = await fetch(`../api/periodos_academicos_crud.php?action=activate&id=${id}`);
+            const response = await fetch(`../api/anios_academicos_crud.php?action=activate&id=${id}`); // Cambio: anios_academicos_crud.php
             const r = await response.json();
             if (r.status) {
                 showCustomMessage(r.message).then(() => location.reload());
@@ -379,18 +386,18 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
                 showCustomMessage("Error: " + r.message);
             }
         } catch (error) {
-            console.error("Error de red al activar período:", error);
-            showCustomMessage("Error de red al activar el período.");
+            console.error("Error de red al activar año académico:", error); // Cambio: año académico
+            showCustomMessage("Error de red al activar el año académico."); // Cambio: año académico
         }
     }
 
-    formPeriodo.addEventListener('submit', async e => {
+    formAnio.addEventListener('submit', async e => { // Cambio: formAnio
         e.preventDefault();
-        const formData = new FormData(formPeriodo);
-        formData.append('activo', document.getElementById('periodo_activo').checked ? 1 : 0);
+        const formData = new FormData(formAnio); // Cambio: formAnio
+        formData.append('activo', document.getElementById('anio_activo').checked ? 1 : 0); // Cambio: anio_activo
 
         try {
-            const response = await fetch('../api/periodos_academicos_crud.php', {
+            const response = await fetch('../api/anios_academicos_crud.php', { // Cambio: anios_academicos_crud.php
                 method: 'POST',
                 body: formData
             });
@@ -401,12 +408,12 @@ $configuraciones = $stmtConfig->fetchAll(PDO::FETCH_ASSOC);
                 showCustomMessage("Error: " + r.message);
             }
         } catch (error) {
-            console.error("Error de red al guardar período:", error);
-            showCustomMessage("Error de red al guardar el período.");
+            console.error("Error de red al guardar año académico:", error); // Cambio: año académico
+            showCustomMessage("Error de red al guardar el año académico."); // Cambio: año académico
         }
     });
 
-    // --- Funciones para Configuración de Horarios por Día ---
+    // --- Funciones para Configuración de Horarios por Día (no cambian, ya que no dependen de anios/periodos) ---
     async function editarConfiguracion(id) {
         try {
             const response = await fetch(`../api/configuracion_horarios_crud.php?id=${id}`);

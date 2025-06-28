@@ -11,7 +11,7 @@ $response = [
 
 // Recoger datos del formulario
 $id_horario = $_POST['id_horario'] ?? null;
-$id_periodo = $_POST['id_periodo'] ?? null;
+$id_anio = $_POST['id_anio'] ?? null;
 $id_profesor = $_POST['id_profesor'] ?? null;
 $id_asignatura = $_POST['id_asignatura'] ?? null;
 $aula_id = $_POST['aula_id'] ?? null;
@@ -20,18 +20,56 @@ $hora_inicio = $_POST['hora_inicio'] ?? null;
 $hora_fin = $_POST['hora_fin'] ?? null;
 
 // Validaciones básicas de entrada
-if (!$id_periodo || !$id_profesor || !$id_asignatura || !$aula_id || !$dia || !$hora_inicio || !$hora_fin) {
+if (!$id_anio || !$id_profesor || !$id_asignatura || !$aula_id || !$dia || !$hora_inicio || !$hora_fin) {
     $response['message'] = 'Todos los campos son obligatorios.';
     echo json_encode($response);
     exit();
 }
 
-// Convertir horas a formato TIME si es necesario (ya deberían venir así del input type="time")
-// $hora_inicio = date('H:i:s', strtotime($hora_inicio));
-// $hora_fin = date('H:i:s', strtotime($hora_fin));
-
 try {
     $pdo->beginTransaction();
+
+    // --- 0. Obtener el turno de la asignatura seleccionada ---
+    $stmtTurno = $pdo->prepare("SELECT c.turno FROM asignaturas a JOIN cursos c ON a.curso_id = c.id_curso WHERE a.id_asignatura = :id_asignatura");
+    $stmtTurno->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
+    $stmtTurno->execute();
+    $turnoAsignatura = $stmtTurno->fetchColumn();
+
+    if (!$turnoAsignatura) {
+        $response['message'] = 'No se pudo determinar el turno para la asignatura seleccionada.';
+        echo json_encode($response);
+        $pdo->rollBack();
+        exit();
+    }
+
+    // Definir los rangos de horario para cada turno
+    $turnosHorarios = [
+        'tarde' => ['inicio' => '12:00', 'fin' => '16:00'],
+        'noche' => ['inicio' => '16:00', 'fin' => '22:00']
+    ];
+
+    $turnoInfo = $turnosHorarios[$turnoAsignatura] ?? null;
+
+    if (!$turnoInfo) {
+        $response['message'] = 'Turno desconocido o no configurado para la asignatura.';
+        echo json_encode($response);
+        $pdo->rollBack();
+        exit();
+    }
+
+    $new_start_ts = strtotime($hora_inicio);
+    $new_end_ts = strtotime($hora_fin);
+    $turno_start_ts = strtotime($turnoInfo['inicio']);
+    $turno_end_ts = strtotime($turnoInfo['fin']);
+
+    if ($new_start_ts < $turno_start_ts || $new_end_ts > $turno_end_ts) {
+        $response['message'] = "Las horas del horario (" . substr($hora_inicio, 0, 5) . "-" . substr($hora_fin, 0, 5) . ") deben estar dentro del rango del turno '" . $turnoAsignatura . "' (" . substr($turnoInfo['inicio'], 0, 5) . "-" . substr($turnoInfo['fin'], 0, 5) . ").";
+        echo json_encode($response);
+        $pdo->rollBack();
+        exit();
+    }
+    // --- Fin Validación por Turno ---
+
 
     // --- 1. Obtener configuración de horarios para el día ---
     $stmtConfig = $pdo->prepare("SELECT * FROM configuracion_horarios WHERE dia_semana = :dia_semana");
@@ -53,9 +91,8 @@ try {
         exit();
     }
 
-    // --- 2. Validaciones de Rango Horario y Duración de Clase ---
-    $new_start_ts = strtotime($hora_inicio);
-    $new_end_ts = strtotime($hora_fin);
+    // --- 2. Validaciones de Rango Horario y Duración de Clase (basadas en configuracion_horarios) ---
+    // (Ya convertidos a timestamp arriba: $new_start_ts, $new_end_ts)
     $config_start_ts = strtotime($configDia['hora_inicio_permitida']);
     $config_end_ts = strtotime($configDia['hora_fin_permitida']);
 
@@ -85,7 +122,7 @@ try {
     $sqlSolapamientoProfesor = "SELECT id_horario FROM horarios
                                 WHERE id_profesor = :id_profesor
                                 AND dia = :dia
-                                AND id_periodo = :id_periodo
+                                AND id_anio = :id_anio
                                 AND (
                                     (hora_inicio < :hora_fin AND hora_fin > :hora_inicio)
                                 )";
@@ -95,7 +132,7 @@ try {
     $stmtSolapamientoProfesor = $pdo->prepare($sqlSolapamientoProfesor);
     $stmtSolapamientoProfesor->bindParam(':id_profesor', $id_profesor, PDO::PARAM_INT);
     $stmtSolapamientoProfesor->bindParam(':dia', $dia, PDO::PARAM_STR);
-    $stmtSolapamientoProfesor->bindParam(':id_periodo', $id_periodo, PDO::PARAM_INT);
+    $stmtSolapamientoProfesor->bindParam(':id_anio', $id_anio, PDO::PARAM_INT);
     $stmtSolapamientoProfesor->bindParam(':hora_inicio', $hora_inicio, PDO::PARAM_STR);
     $stmtSolapamientoProfesor->bindParam(':hora_fin', $hora_fin, PDO::PARAM_STR);
     if ($id_horario) {
@@ -113,7 +150,7 @@ try {
     $sqlSolapamientoAula = "SELECT id_horario FROM horarios
                             WHERE aula_id = :aula_id
                             AND dia = :dia
-                            AND id_periodo = :id_periodo
+                            AND id_anio = :id_anio
                             AND (
                                 (hora_inicio < :hora_fin AND hora_fin > :hora_inicio)
                             )";
@@ -123,7 +160,7 @@ try {
     $stmtSolapamientoAula = $pdo->prepare($sqlSolapamientoAula);
     $stmtSolapamientoAula->bindParam(':aula_id', $aula_id, PDO::PARAM_INT);
     $stmtSolapamientoAula->bindParam(':dia', $dia, PDO::PARAM_STR);
-    $stmtSolapamientoAula->bindParam(':id_periodo', $id_periodo, PDO::PARAM_INT);
+    $stmtSolapamientoAula->bindParam(':id_anio', $id_anio, PDO::PARAM_INT);
     $stmtSolapamientoAula->bindParam(':hora_inicio', $hora_inicio, PDO::PARAM_STR);
     $stmtSolapamientoAula->bindParam(':hora_fin', $hora_fin, PDO::PARAM_STR);
     if ($id_horario) {
@@ -141,14 +178,14 @@ try {
     $sqlHorariosDiaProfesor = "SELECT hora_inicio, hora_fin FROM horarios
                                WHERE id_profesor = :id_profesor
                                AND dia = :dia
-                               AND id_periodo = :id_periodo";
+                               AND id_anio = :id_anio";
     if ($id_horario) {
         $sqlHorariosDiaProfesor .= " AND id_horario != :id_horario";
     }
     $stmtHorariosDiaProfesor = $pdo->prepare($sqlHorariosDiaProfesor);
     $stmtHorariosDiaProfesor->bindParam(':id_profesor', $id_profesor, PDO::PARAM_INT);
     $stmtHorariosDiaProfesor->bindParam(':dia', $dia, PDO::PARAM_STR);
-    $stmtHorariosDiaProfesor->bindParam(':id_periodo', $id_periodo, PDO::PARAM_INT);
+    $stmtHorariosDiaProfesor->bindParam(':id_anio', $id_anio, PDO::PARAM_INT);
     if ($id_horario) {
         $stmtHorariosDiaProfesor->bindParam(':id_horario', $id_horario, PDO::PARAM_INT);
     }
@@ -196,7 +233,7 @@ try {
     if ($id_horario) {
         // Actualizar
         $stmt = $pdo->prepare("UPDATE horarios SET
-                                id_periodo = :id_periodo,
+                                id_anio = :id_anio,
                                 id_asignatura = :id_asignatura,
                                 id_profesor = :id_profesor,
                                 aula_id = :aula_id,
@@ -208,12 +245,12 @@ try {
         $message = 'Horario actualizado correctamente.';
     } else {
         // Insertar
-        $stmt = $pdo->prepare("INSERT INTO horarios (id_periodo, id_asignatura, id_profesor, aula_id, dia, hora_inicio, hora_fin) VALUES (
-                                :id_periodo, :id_asignatura, :id_profesor, :aula_id, :dia, :hora_inicio, :hora_fin)");
+        $stmt = $pdo->prepare("INSERT INTO horarios (id_anio, id_asignatura, id_profesor, aula_id, dia, hora_inicio, hora_fin) VALUES (
+                                :id_anio, :id_asignatura, :id_profesor, :aula_id, :dia, :hora_inicio, :hora_fin)");
         $message = 'Horario guardado correctamente.';
     }
 
-    $stmt->bindParam(':id_periodo', $id_periodo, PDO::PARAM_INT);
+    $stmt->bindParam(':id_anio', $id_anio, PDO::PARAM_INT);
     $stmt->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
     $stmt->bindParam(':id_profesor', $id_profesor, PDO::PARAM_INT);
     $stmt->bindParam(':aula_id', $aula_id, PDO::PARAM_INT);

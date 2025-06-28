@@ -14,31 +14,31 @@ $response = [
 
 // Validar y obtener los parámetros
 $id_profesor = $_GET['id_profesor'] ?? null;
-$aula_id = $_GET['aula_id'] ?? null; // Añadido para la validación de aula
+$aula_id = $_GET['aula_id'] ?? null;
 $dia = $_GET['dia'] ?? null;
 $hora_inicio = $_GET['hora_inicio'] ?? null;
 $hora_fin = $_GET['hora_fin'] ?? null;
 $id_horario = $_GET['id_horario'] ?? null; // ID del horario actual si es edición
-$id_periodo = $_GET['id_periodo'] ?? null; // ID del periodo académico
+$id_anio = $_GET['id_anio'] ?? null; // Cambio aquí: ID del año académico
 
-if (!$id_profesor || !$dia || !$hora_inicio || !$hora_fin || !$aula_id || !$id_periodo) {
+if (!$id_profesor || !$dia || !$hora_inicio || !$hora_fin || !$aula_id || !$id_anio) { // Cambio aquí: id_anio
     echo json_encode($response);
     exit();
 }
 
 try {
-    // 1. Consultar horarios existentes del profesor para el día y periodo
+    // 1. Consultar horarios existentes del profesor para el día y año
     $sqlProfesor = "SELECT hora_inicio, hora_fin FROM horarios
                     WHERE id_profesor = :id_profesor
                     AND dia = :dia
-                    AND id_periodo = :id_periodo";
+                    AND id_anio = :id_anio"; // Cambio aquí: id_anio
     if ($id_horario) {
         $sqlProfesor .= " AND id_horario != :id_horario";
     }
     $stmtProfesor = $pdo->prepare($sqlProfesor);
     $stmtProfesor->bindParam(':id_profesor', $id_profesor, PDO::PARAM_INT);
     $stmtProfesor->bindParam(':dia', $dia, PDO::PARAM_STR);
-    $stmtProfesor->bindParam(':id_periodo', $id_periodo, PDO::PARAM_INT);
+    $stmtProfesor->bindParam(':id_anio', $id_anio, PDO::PARAM_INT); // Cambio aquí: id_anio
     if ($id_horario) {
         $stmtProfesor->bindParam(':id_horario', $id_horario, PDO::PARAM_INT);
     }
@@ -59,18 +59,18 @@ try {
         }
     }
 
-    // 2. Consultar horarios existentes del aula para el día y periodo
+    // 2. Consultar horarios existentes del aula para el día y año
     $sqlAula = "SELECT hora_inicio, hora_fin FROM horarios
                 WHERE aula_id = :aula_id
                 AND dia = :dia
-                AND id_periodo = :id_periodo";
+                AND id_anio = :id_anio"; // Cambio aquí: id_anio
     if ($id_horario) {
         $sqlAula .= " AND id_horario != :id_horario";
     }
     $stmtAula = $pdo->prepare($sqlAula);
     $stmtAula->bindParam(':aula_id', $aula_id, PDO::PARAM_INT);
     $stmtAula->bindParam(':dia', $dia, PDO::PARAM_STR);
-    $stmtAula->bindParam(':id_periodo', $id_periodo, PDO::PARAM_INT);
+    $stmtAula->bindParam(':id_anio', $id_anio, PDO::PARAM_INT); // Cambio aquí: id_anio
     if ($id_horario) {
         $stmtAula->bindParam(':id_horario', $id_horario, PDO::PARAM_INT);
     }
