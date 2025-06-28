@@ -59,7 +59,7 @@ if (!isset($_SESSION['rol']) || $_SESSION['rol'] !== 'profesor') {
           </li> 
           <li class="nav-item">
             <a class="nav-link text-danger" href="../logout.php"><i class="bi bi-box-arrow-right"></i>
-              Salir</a>
+              Cerrar Sesión</a>
           </li>
         </ul>
       </div>

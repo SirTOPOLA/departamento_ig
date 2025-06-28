@@ -221,6 +221,23 @@ CREATE TABLE `horarios` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
+ 
+-- Tabla para configuración de horarios por día de la semana
+-- Aquí el administrador podrá definir las reglas de tiempo, duración y horas máximas
+-- para cada día, incluyendo la flexibilidad del Sábado.
+CREATE TABLE `configuracion_horarios` (
+    `id_config` INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `dia_semana` VARCHAR(10) UNIQUE NOT NULL, -- Ej: 'Lunes', 'Martes', ..., 'Sábado', 'Default'
+                                             -- 'Default' se usará si no hay una configuración específica para un día
+    `hora_inicio_permitida` TIME NOT NULL,   -- Hora mínima permitida para iniciar clases
+    `hora_fin_permitida` TIME NOT NULL,     -- Hora máxima permitida para finalizar clases
+    `max_horas_dia_profesor` INT(11) DEFAULT 6, -- Máximo de horas que un profesor puede impartir por día
+    `min_duracion_clase_min` INT(11) DEFAULT 60, -- Duración mínima de una clase en minutos (ej: 60 para 1 hora)
+    `max_duracion_clase_min` INT(11) DEFAULT 120, -- Duración máxima de una clase en minutos (ej: 120 para 2 horas)
+    `requiere_mixto_horas` BOOLEAN DEFAULT FALSE, -- Si es TRUE, se aplica la regla de combinación mixta de clases (1h/2h)
+    `min_clases_1h_mixto` INT(11) DEFAULT 1, -- Mínimo de clases de 1 hora si se aplica la regla mixta
+    `min_clases_2h_mixto` INT(11) DEFAULT 1  -- Mínimo de clases de 2 horas si se aplica la regla mixta
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Estructura de tabla para la tabla `inscripciones`
@@ -345,6 +362,9 @@ CREATE TABLE `usuarios` (
   `creado_en` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+
+
+ 
 --
 -- Volcado de datos para la tabla `usuarios`
 --
