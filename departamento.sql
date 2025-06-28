@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 23-06-2025 a las 11:16:11
+-- Tiempo de generación: 28-06-2025 a las 14:52:23
 -- Versión del servidor: 10.4.32-MariaDB
--- Versión de PHP: 8.2.12
+-- Versión de PHP: 8.0.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -57,6 +57,15 @@ CREATE TABLE `asignaturas` (
   `semestre_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Volcado de datos para la tabla `asignaturas`
+--
+
+INSERT INTO `asignaturas` (`id_asignatura`, `nombre`, `descripcion`, `codigo`, `curso_id`, `semestre_id`) VALUES
+(1, 'matematicas', 'BA', NULL, 1, 1),
+(2, 'Analisis 1', 'BA', NULL, 1, 2),
+(3, 'Analisis 2', 'BA', NULL, 2, 2);
+
 -- --------------------------------------------------------
 
 --
@@ -68,6 +77,13 @@ CREATE TABLE `asignatura_profesor` (
   `id_profesor` int(11) NOT NULL,
   `id_asignatura` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `asignatura_profesor`
+--
+
+INSERT INTO `asignatura_profesor` (`id`, `id_profesor`, `id_asignatura`) VALUES
+(1, 2, 1);
 
 -- --------------------------------------------------------
 
@@ -81,6 +97,13 @@ CREATE TABLE `asignatura_requisitos` (
   `requisito_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Volcado de datos para la tabla `asignatura_requisitos`
+--
+
+INSERT INTO `asignatura_requisitos` (`id`, `asignatura_id`, `requisito_id`) VALUES
+(1, 3, 2);
+
 -- --------------------------------------------------------
 
 --
@@ -93,6 +116,40 @@ CREATE TABLE `aulas` (
   `capacidad` int(11) NOT NULL DEFAULT 10,
   `ubicacion` varchar(100) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `aulas`
+--
+
+INSERT INTO `aulas` (`id_aula`, `nombre`, `capacidad`, `ubicacion`) VALUES
+(1, 'AULA', 20, 'AUA');
+
+-- --------------------------------------------------------
+
+--
+-- Estructura de tabla para la tabla `configuracion_horarios`
+--
+
+CREATE TABLE `configuracion_horarios` (
+  `id` int(11) NOT NULL,
+  `dia_semana` varchar(10) NOT NULL,
+  `hora_inicio_permitida` time NOT NULL,
+  `hora_fin_permitida` time NOT NULL,
+  `max_horas_dia_profesor` int(11) DEFAULT 6,
+  `min_duracion_clase_min` int(11) DEFAULT 60,
+  `max_duracion_clase_min` int(11) DEFAULT 120,
+  `requiere_mixto_horas` tinyint(1) DEFAULT 0,
+  `min_clases_1h_mixto` int(11) DEFAULT 1,
+  `min_clases_2h_mixto` int(11) DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `configuracion_horarios`
+--
+
+INSERT INTO `configuracion_horarios` (`id`, `dia_semana`, `hora_inicio_permitida`, `hora_fin_permitida`, `max_horas_dia_profesor`, `min_duracion_clase_min`, `max_duracion_clase_min`, `requiere_mixto_horas`, `min_clases_1h_mixto`, `min_clases_2h_mixto`) VALUES
+(1, 'Lunes', '12:00:00', '22:00:00', 2, 60, 120, 1, 1, 1),
+(2, 'Jueves', '12:00:00', '22:00:00', 3, 60, 120, 0, 0, 0);
 
 -- --------------------------------------------------------
 
@@ -113,7 +170,10 @@ CREATE TABLE `cursos` (
 --
 
 INSERT INTO `cursos` (`id_curso`, `nombre`, `turno`, `grupo`, `descripcion`) VALUES
-(1, 'primero', 'tarde', 1, '');
+(1, 'primero', 'tarde', 1, ''),
+(2, 'segundo', 'tarde', 1, ''),
+(3, 'tercero', 'tarde', 1, ''),
+(4, 'primero', 'noche', 2, '');
 
 -- --------------------------------------------------------
 
@@ -217,27 +277,19 @@ CREATE TABLE `horarios` (
   `aula_id` int(11) NOT NULL,
   `dia` enum('Lunes','Martes','Miércoles','Jueves','Viernes','Sábado') NOT NULL,
   `hora_inicio` time NOT NULL,
-  `hora_fin` time NOT NULL
+  `hora_fin` time NOT NULL,
+  `id_anio` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Volcado de datos para la tabla `horarios`
+--
+
+INSERT INTO `horarios` (`id_horario`, `id_asignatura`, `id_profesor`, `aula_id`, `dia`, `hora_inicio`, `hora_fin`, `id_anio`) VALUES
+(1, 1, 2, 1, 'Lunes', '12:00:00', '13:00:00', 1),
+(2, 1, 2, 1, 'Jueves', '16:00:00', '17:00:00', 1);
+
 -- --------------------------------------------------------
- 
--- Tabla para configuración de horarios por día de la semana
--- Aquí el administrador podrá definir las reglas de tiempo, duración y horas máximas
--- para cada día, incluyendo la flexibilidad del Sábado.
-CREATE TABLE `configuracion_horarios` (
-    `id_config` INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `dia_semana` VARCHAR(10) UNIQUE NOT NULL, -- Ej: 'Lunes', 'Martes', ..., 'Sábado', 'Default'
-                                             -- 'Default' se usará si no hay una configuración específica para un día
-    `hora_inicio_permitida` TIME NOT NULL,   -- Hora mínima permitida para iniciar clases
-    `hora_fin_permitida` TIME NOT NULL,     -- Hora máxima permitida para finalizar clases
-    `max_horas_dia_profesor` INT(11) DEFAULT 6, -- Máximo de horas que un profesor puede impartir por día
-    `min_duracion_clase_min` INT(11) DEFAULT 60, -- Duración mínima de una clase en minutos (ej: 60 para 1 hora)
-    `max_duracion_clase_min` INT(11) DEFAULT 120, -- Duración máxima de una clase en minutos (ej: 120 para 2 horas)
-    `requiere_mixto_horas` BOOLEAN DEFAULT FALSE, -- Si es TRUE, se aplica la regla de combinación mixta de clases (1h/2h)
-    `min_clases_1h_mixto` INT(11) DEFAULT 1, -- Mínimo de clases de 1 hora si se aplica la regla mixta
-    `min_clases_2h_mixto` INT(11) DEFAULT 1  -- Mínimo de clases de 2 horas si se aplica la regla mixta
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Estructura de tabla para la tabla `inscripciones`
@@ -340,7 +392,12 @@ CREATE TABLE `semestres` (
 --
 
 INSERT INTO `semestres` (`id_semestre`, `nombre`, `curso_id`) VALUES
-(1, 'primero', 1);
+(1, 'primero', 1),
+(2, 'segundo', 1),
+(3, 'tercero', 2),
+(4, 'cuarto', 2),
+(5, 'quinto', 3),
+(6, 'sexto', 3);
 
 -- --------------------------------------------------------
 
@@ -362,9 +419,6 @@ CREATE TABLE `usuarios` (
   `creado_en` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-
-
- 
 --
 -- Volcado de datos para la tabla `usuarios`
 --
@@ -414,6 +468,13 @@ ALTER TABLE `asignatura_requisitos`
 --
 ALTER TABLE `aulas`
   ADD PRIMARY KEY (`id_aula`);
+
+--
+-- Indices de la tabla `configuracion_horarios`
+--
+ALTER TABLE `configuracion_horarios`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `dia_semana` (`dia_semana`);
 
 --
 -- Indices de la tabla `cursos`
@@ -467,7 +528,8 @@ ALTER TABLE `horarios`
   ADD PRIMARY KEY (`id_horario`),
   ADD KEY `id_asignatura` (`id_asignatura`),
   ADD KEY `id_profesor` (`id_profesor`),
-  ADD KEY `aula_id` (`aula_id`);
+  ADD KEY `aula_id` (`aula_id`),
+  ADD KEY `fk_anios_academicos` (`id_anio`);
 
 --
 -- Indices de la tabla `inscripciones`
@@ -534,31 +596,37 @@ ALTER TABLE `anios_academicos`
 -- AUTO_INCREMENT de la tabla `asignaturas`
 --
 ALTER TABLE `asignaturas`
-  MODIFY `id_asignatura` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_asignatura` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT de la tabla `asignatura_profesor`
 --
 ALTER TABLE `asignatura_profesor`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `asignatura_requisitos`
 --
 ALTER TABLE `asignatura_requisitos`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `aulas`
 --
 ALTER TABLE `aulas`
-  MODIFY `id_aula` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_aula` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT de la tabla `configuracion_horarios`
+--
+ALTER TABLE `configuracion_horarios`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `cursos`
 --
 ALTER TABLE `cursos`
-  MODIFY `id_curso` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id_curso` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT de la tabla `curso_aula`
@@ -588,7 +656,7 @@ ALTER TABLE `historial_academico`
 -- AUTO_INCREMENT de la tabla `horarios`
 --
 ALTER TABLE `horarios`
-  MODIFY `id_horario` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_horario` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `inscripciones`
@@ -618,7 +686,7 @@ ALTER TABLE `requisitos_matricula`
 -- AUTO_INCREMENT de la tabla `semestres`
 --
 ALTER TABLE `semestres`
-  MODIFY `id_semestre` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id_semestre` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT de la tabla `usuarios`
@@ -684,6 +752,7 @@ ALTER TABLE `historial_academico`
 -- Filtros para la tabla `horarios`
 --
 ALTER TABLE `horarios`
+  ADD CONSTRAINT `fk_anios_academicos` FOREIGN KEY (`id_anio`) REFERENCES `anios_academicos` (`id_anio`),
   ADD CONSTRAINT `horarios_ibfk_1` FOREIGN KEY (`id_asignatura`) REFERENCES `asignaturas` (`id_asignatura`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `horarios_ibfk_2` FOREIGN KEY (`id_profesor`) REFERENCES `profesores` (`id_profesor`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `horarios_ibfk_3` FOREIGN KEY (`aula_id`) REFERENCES `aulas` (`id_aula`) ON DELETE CASCADE ON UPDATE CASCADE;
