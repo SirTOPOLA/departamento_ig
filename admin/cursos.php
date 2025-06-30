@@ -1,226 +1,343 @@
-<?php 
-include_once('header.php'); ?>
 <?php
-require_once '../includes/conexion.php';
+require_once '../includes/functions.php';
+ 
+check_login_and_role('Administrador');
 
-// Parámetros
-$pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int) $_GET['pagina'] : 1;
-$busqueda = isset($_GET['busqueda']) ? trim($_GET['busqueda']) : '';
-$por_pagina = 5;
+require_once '../config/database.php';
 
-// Filtro
-$where = '';
-$params = [];
-if ($busqueda !== '') {
-  $where = "WHERE nombre LIKE :busqueda OR descripcion LIKE :busqueda";
-  $params[':busqueda'] = "%$busqueda%";
+$page_title = "Gestión de Cursos";
+include_once '../includes/header.php';
+
+// --- Lógica para añadir/editar/eliminar cursos ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    $id = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT);
+    $nombre_curso = sanitize_input($_POST['nombre_curso'] ?? '');
+    $descripcion = sanitize_input($_POST['descripcion'] ?? '');
+
+    // Validaciones básicas
+    if (empty($nombre_curso)) {
+        set_flash_message('danger', 'Error: El nombre del curso es obligatorio.');
+    } else {
+        try {
+            if ($action === 'add') {
+                $stmt = $pdo->prepare("INSERT INTO cursos (nombre_curso, descripcion) VALUES (:nombre_curso, :descripcion)");
+                $stmt->bindParam(':nombre_curso', $nombre_curso);
+                $stmt->bindParam(':descripcion', $descripcion);
+                $stmt->execute();
+                set_flash_message('success', 'Curso añadido correctamente.');
+            } elseif ($action === 'edit') {
+                if ($id === null) {
+                    set_flash_message('danger', 'Error: ID de curso no válido para edición.');
+                } else {
+                    $stmt = $pdo->prepare("UPDATE cursos SET nombre_curso = :nombre_curso, descripcion = :descripcion WHERE id = :id");
+                    $stmt->bindParam(':nombre_curso', $nombre_curso);
+                    $stmt->bindParam(':descripcion', $descripcion);
+                    $stmt->bindParam(':id', $id);
+                    $stmt->execute();
+                    set_flash_message('success', 'Curso actualizado correctamente.');
+                }
+            } elseif ($action === 'delete') {
+                if ($id === null) {
+                    set_flash_message('danger', 'Error: ID de curso no válido para eliminación.');
+                } else {
+                    // TODO: Añadir verificación si el curso está siendo utilizado por asignaturas o estudiantes
+                    $stmt = $pdo->prepare("DELETE FROM cursos WHERE id = :id");
+                    $stmt->bindParam(':id', $id);
+                    $stmt->execute();
+                    set_flash_message('success', 'Curso eliminado correctamente.');
+                }
+            }
+        } catch (PDOException $e) {
+            if ($e->getCode() == '23000') { // Violación de integridad (ej. nombre_curso UNIQUE)
+                set_flash_message('danger', 'Error: Ya existe un curso con el mismo nombre.');
+            } else {
+                set_flash_message('danger', 'Error de base de datos: ' . $e->getMessage());
+            }
+        }
+    }
+     
 }
 
-// Total de registros
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM cursos $where");
-$stmt->execute($params);
-$total_registros = $stmt->fetchColumn();
-$total_paginas = ceil($total_registros / $por_pagina);
-$offset = ($pagina - 1) * $por_pagina;
+// --- Obtener todos los cursos para la tabla ---
+$stmt_cursos = $pdo->query("SELECT id, nombre_curso, descripcion FROM cursos ORDER BY nombre_curso ASC");
+$cursos = $stmt_cursos->fetchAll();
 
-// Consulta cursos
-$sql = "SELECT * FROM cursos $where ORDER BY id_curso DESC LIMIT :offset, :por_pagina";
-$stmt = $pdo->prepare($sql);
-if ($busqueda !== '') {
-  $stmt->bindValue(':busqueda', "%$busqueda%", PDO::PARAM_STR);
-}
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt->bindValue(':por_pagina', $por_pagina, PDO::PARAM_INT);
-$stmt->execute();
-$cursos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// Obtener mensajes flash para JavaScript
+$flash_messages = get_flash_messages();
+
 ?>
 
-<div class="content" id="content" tabindex="-1">
-  <div class="container py-5">  <h3 class="mb-0">📚 Gestión de Cursos</h3>
-    <button class="btn btn-success" onclick="abrirModal()">
-      <i class="bi bi-plus-circle"></i> Nuevo Curso
+<h1 class="mt-4">Gestión de Cursos</h1>
+<p class="lead">Administra los diferentes cursos académicos (ej. Primer Curso, Segundo Curso, Máster).</p>
+
+<div class="mb-3 d-flex justify-content-between align-items-center">
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#courseModal" id="addCourseBtn">
+        <i class="fas fa-plus-circle me-2"></i>Añadir Nuevo Curso
     </button>
-  </div>
-
-  <!-- Buscador -->
-  <form method="GET" class="mb-3" style="max-width: 400px;">
-    <div class="input-group">
-      <input type="search" name="busqueda" class="form-control" placeholder="Buscar por nombre o descripción"
-        value="<?= htmlspecialchars($busqueda) ?>" />
-      <button class="btn btn-primary" type="submit">Buscar</button>
+    <div class="col-md-4">
+        <input type="search" class="form-control" id="searchInput" placeholder="Buscar curso...">
     </div>
-  </form>
-
-  <div class="table-responsive">
-    <table class="table table-hover table-striped align-middle">
-      <thead class="table-primary">
-        <tr>
-          <th>#</th>
-          <th>Nombre</th>
-          <th>Turno</th>
-          <th>Grupo</th>
-          <th>Descripción</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php if (empty($cursos)): ?>
-          <tr><td colspan="6" class="text-center">No se encontraron cursos</td></tr>
-        <?php else: ?>
-          <?php foreach ($cursos as $curso): ?>
-            <tr>
-              <td><?= $curso['id_curso'] ?></td>
-              <td><?= htmlspecialchars($curso['nombre']) ?></td>
-              <td><span class="badge bg-info"><?= ucfirst($curso['turno']) ?></span></td>
-              <td><?= $curso['grupo'] ?></td>
-              <td><?= htmlspecialchars($curso['descripcion']) ?></td>
-              <td>
-                <button class="btn btn-sm btn-warning me-1" onclick="editarCurso(<?= $curso['id_curso'] ?>)">
-                  <i class="bi bi-pencil-square"></i>
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="eliminarCurso(<?= $curso['id_curso'] ?>)">
-                  <i class="bi bi-trash"></i>
-                </button>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Paginación -->
-  <nav aria-label="Paginación de cursos">
-    <ul class="pagination justify-content-center">
-      <li class="page-item <?= ($pagina <= 1) ? 'disabled' : '' ?>">
-        <a class="page-link" href="?pagina=<?= $pagina - 1 ?>&busqueda=<?= urlencode($busqueda) ?>">Anterior</a>
-      </li>
-      <?php for ($i = 1; $i <= $total_paginas; $i++): ?>
-        <li class="page-item <?= ($pagina === $i) ? 'active' : '' ?>">
-          <a class="page-link" href="?pagina=<?= $i ?>&busqueda=<?= urlencode($busqueda) ?>"><?= $i ?></a>
-        </li>
-      <?php endfor; ?>
-      <li class="page-item <?= ($pagina >= $total_paginas) ? 'disabled' : '' ?>">
-        <a class="page-link" href="?pagina=<?= $pagina + 1 ?>&busqueda=<?= urlencode($busqueda) ?>">Siguiente</a>
-      </li>
-    </ul>
-  </nav>
 </div>
 
-<!-- MODAL -->
-<div class="modal fade" id="modalCurso" tabindex="-1" aria-labelledby="modalCursoLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <form class="modal-content" id="formCurso">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title" id="modalCursoLabel"><i class="bi bi-book me-2"></i> Curso</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <input type="hidden" name="id_curso" id="id_curso">
-
-        <div class="mb-3">
-          <label for="nombre" class="form-label">Nombre</label>
-          <input type="text" class="form-control" name="nombre" id="nombre" required>
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0">Lista de Cursos</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped" id="cursosTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre Curso</th>
+                        <th>Descripción</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (count($cursos) > 0): ?>
+                        <?php foreach ($cursos as $curso): ?>
+                            <tr data-id="<?php echo htmlspecialchars($curso['id']); ?>"
+                                data-nombre_curso="<?php echo htmlspecialchars($curso['nombre_curso']); ?>"
+                                data-descripcion="<?php echo htmlspecialchars($curso['descripcion']); ?>">
+                                <td><?php echo htmlspecialchars($curso['id']); ?></td>
+                                <td><?php echo htmlspecialchars($curso['nombre_curso']); ?></td>
+                                <td><?php echo htmlspecialchars($curso['descripcion']); ?></td>
+                                <td>
+                                    <button type="button" class="btn btn-warning btn-sm edit-btn me-1" title="Editar" data-bs-toggle="modal" data-bs-target="#courseModal">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <form action="cursos.php" method="POST" class="d-inline" onsubmit="return confirm('¿Estás seguro de que quieres eliminar este curso? Esto podría afectar a asignaturas y estudiantes asociados.');">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="id" value="<?php echo htmlspecialchars($curso['id']); ?>">
+                                        <button type="submit" class="btn btn-danger btn-sm" title="Eliminar">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="4" class="text-center">No hay cursos registrados.</td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
         </div>
-
-        <div class="mb-3">
-          <label for="turno" class="form-label">Turno</label>
-          <select class="form-select" name="turno" id="turno" required>
-            <option value="">Seleccione</option>
-            <option value="tarde">Tarde</option>
-            <option value="noche">Noche</option>
-          </select>
-        </div>
-
-        <div class="mb-3">
-          <label for="grupo" class="form-label">Grupo</label>
-          <input type="number" class="form-control" name="grupo" id="grupo" value="1" min="1" required>
-        </div>
-
-        <div class="mb-3">
-          <label for="descripcion" class="form-label">Descripción</label>
-          <textarea class="form-control" name="descripcion" id="descripcion" rows="3"></textarea>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-success" type="submit"><i class="bi bi-save"></i> Guardar</button>
-        <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
-      </div>
-    </form>
-  </div>
+        <nav>
+            <ul class="pagination justify-content-center" id="pagination">
+                </ul>
+        </nav>
+    </div>
 </div>
 
-<!-- Aquí tus scripts JS, modal, fetch, etc -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<div class="modal fade" id="courseModal" tabindex="-1" aria-labelledby="courseModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <form id="courseForm" action="cursos.php" method="POST">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="courseModalLabel">Añadir Nuevo Curso</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="action" id="formAction" value="add">
+                    <input type="hidden" name="id" id="courseId">
+
+                    <div class="mb-3">
+                        <label for="nombre_curso" class="form-label">Nombre del Curso <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nombre_curso" name="nombre_curso" required>
+                        <small class="form-text text-muted">Ej: Primer Curso, Máster en Ingeniería de Software</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="descripcion" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="descripcion" name="descripcion" rows="3"></textarea>
+                        <small class="form-text text-muted">Breve descripción del curso.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Cerrar
+                    </button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i class="fas fa-save me-1"></i> Añadir Curso
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<?php include_once '../includes/footer.php'; ?>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
+    </div>
 
 <script>
-  const modalCurso = new bootstrap.Modal(document.getElementById('modalCurso'));
-  const formCurso = document.getElementById('formCurso');
+    const flashMessages = <?php echo json_encode($flash_messages); ?>;
 
-  function abrirModal() {
-    formCurso.reset();
-    document.getElementById('id_curso').value = '';
-    modalCurso.show();
-  }
+    // Lógica para abrir modal de "Añadir Nuevo Curso"
+    document.getElementById('addCourseBtn').addEventListener('click', function() {
+        document.getElementById('courseModalLabel').innerText = 'Añadir Nuevo Curso';
+        document.getElementById('formAction').value = 'add';
+        document.getElementById('courseId').value = '';
+        document.getElementById('courseForm').reset();
+        document.getElementById('submitBtn').innerText = 'Añadir Curso';
+    });
 
-  function editarCurso(id) {
-    fetch(`../api/obtener_curso.php?id=${id}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.id_curso) {
-          for (let campo in data) {
-            if (formCurso.elements[campo]) {
-              formCurso.elements[campo].value = data[campo];
+    // Lógica para abrir modal de "Editar Curso"
+    document.querySelectorAll('.edit-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            document.getElementById('courseModalLabel').innerText = 'Editar Curso';
+            document.getElementById('formAction').value = 'edit';
+            document.getElementById('submitBtn').innerText = 'Guardar Cambios';
+
+            const row = this.closest('tr');
+            document.getElementById('courseId').value = row.dataset.id;
+            document.getElementById('nombre_curso').value = row.dataset.nombre_curso;
+            document.getElementById('descripcion').value = row.dataset.descripcion;
+        });
+    });
+
+    // --- Búsqueda dinámica ---
+    document.getElementById('searchInput').addEventListener('keyup', function() {
+        var input, filter, table, tr, td, i, j, txtValue;
+        input = document.getElementById("searchInput");
+        filter = input.value.toUpperCase();
+        table = document.getElementById("cursosTable");
+        tr = table.getElementsByTagName("tr");
+
+        document.getElementById('pagination').style.display = 'none';
+
+        for (i = 1; i < tr.length; i++) { // Skip header row
+            tr[i].style.display = "none";
+            td = tr[i].getElementsByTagName("td");
+            for (j = 0; j < td.length; j++) { // Check all columns
+                if (td[j]) {
+                    txtValue = td[j].textContent || td[j].innerText;
+                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                        break;
+                    }
+                }
             }
-          }
-          modalCurso.show();
-        } else {
-          alert("Curso no encontrado");
         }
-      })
-      .catch(() => alert("Error al cargar el curso."));
-  }
+        if (filter === "") {
+            document.getElementById('pagination').style.display = 'flex';
+            showPage(currentPage);
+        }
+    });
 
-  formCurso.addEventListener('submit', function (e) {
-    e.preventDefault();
-    const datos = new FormData(formCurso);
+    // --- Paginación ---
+    const rowsPerPage = 10;
+    let currentPage = 1;
+    let totalPages = 0;
 
-    fetch('../api/guardar_curso.php', {
-      method: 'POST',
-      body: datos
-    })
-    .then(res => res.json())
-    .then(r => {
-      if (r.status) {
-        alert(r.message);
-        location.reload();
-      } else {
-        alert("Error: " + r.message);
-      }
-    })
-    .catch(() => alert("Error de conexión"));
-  });
+    function setupPagination() {
+        const table = document.getElementById('cursosTable');
+        const tbodyRows = table.querySelectorAll('tbody tr');
+        totalPages = Math.ceil(tbodyRows.length / rowsPerPage);
+        
+        const paginationUl = document.getElementById('pagination');
+        paginationUl.innerHTML = '';
 
-  function eliminarCurso(id) {
-    if (!confirm("¿Seguro que deseas eliminar este curso?")) return;
+        if (tbodyRows.length <= rowsPerPage && document.getElementById('searchInput').value === "") {
+            paginationUl.style.display = 'none';
+            tbodyRows.forEach(row => row.style.display = ''); // Ensure all rows are visible if no pagination
+            return;
+        } else {
+            paginationUl.style.display = 'flex';
+        }
 
-    const formData = new FormData();
-    formData.append('id_curso', id);
+        for (let i = 1; i <= totalPages; i++) {
+            const li = document.createElement('li');
+            li.classList.add('page-item');
+            if (i === currentPage) {
+                li.classList.add('active');
+            }
+            const a = document.createElement('a');
+            a.classList.add('page-link');
+            a.href = '#';
+            a.innerText = i;
+            a.addEventListener('click', function(e) {
+                e.preventDefault();
+                currentPage = i;
+                showPage(currentPage);
+            });
+            li.appendChild(a);
+            paginationUl.appendChild(li);
+        }
+    }
 
-    fetch('../api/eliminar_curso.php', {
-      method: 'POST',
-      body: formData
-    })
-    .then(res => res.json())
-    .then(resp => {
-      if (resp.status) {
-        alert(resp.message);
-        location.reload();
-      } else {
-        alert("Error: " + resp.message);
-      }
-    })
-    .catch(() => alert("Error de conexión"));
-  }
+    function showPage(page) {
+        const table = document.getElementById('cursosTable');
+        const tbodyRows = table.querySelectorAll('tbody tr');
+        
+        const startIndex = (page - 1) * rowsPerPage;
+        const endIndex = startIndex + rowsPerPage;
+
+        tbodyRows.forEach((row, index) => {
+            if (index >= startIndex && index < endIndex) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        document.querySelectorAll('#pagination .page-item').forEach(li => {
+            li.classList.remove('active');
+        });
+        const activePageLink = document.querySelector(`#pagination .page-item:nth-child(${page})`);
+        if (activePageLink) {
+            activePageLink.classList.add('active');
+        }
+    }
+
+    // Función para mostrar un Toast de Bootstrap (reutilizada de la anterior)
+    function showToast(type, message) {
+        const toastContainer = document.querySelector('.toast-container');
+        const toastId = 'toast-' + Date.now();
+
+        let bgColor = '';
+        switch (type) {
+            case 'success': bgColor = 'bg-success'; break;
+            case 'danger': bgColor = 'bg-danger'; break;
+            case 'warning': bgColor = 'bg-warning text-dark'; break;
+            case 'info': bgColor = 'bg-info'; break;
+            default: bgColor = 'bg-secondary'; break;
+        }
+
+        const toastHtml = `
+            <div id="${toastId}" class="toast align-items-center text-white ${bgColor} border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement);
+        toast.show();
+
+        toastElement.addEventListener('hidden.bs.toast', function () {
+            toastElement.remove();
+        });
+    }
+
+    // Inicializar la paginación, mostrar la primera página y los toasts al cargar
+    document.addEventListener('DOMContentLoaded', function() {
+        setupPagination();
+        showPage(currentPage);
+
+        flashMessages.forEach(msg => {
+            showToast(msg.type, msg.message);
+        });
+    });
+
 </script>
-<?php include_once('footer.php'); ?>

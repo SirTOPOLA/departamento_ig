@@ -1,3 +1,0 @@
-REG-6854eab86a549 | estudiante:4 | asignatura:1 | p1:7 | p2:6 | final:3 | obs: puede mejorar
-REG-6855510528459 | estudiante:9 | asignatura:2 | p1:3 | p2:5 | final:8 | obs: 
-REG-6855ae33dbe3d | estudiante:7 | asignatura:7 | p1:5 | p2:9 | final:7 | obs: 

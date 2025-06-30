@@ -1,83 +1,153 @@
 <?php
 
-require 'includes/conexion.php';
+// Asegúrate de que la ruta a database.php sea correcta desde donde se ejecuta este script
+require_once 'config/database.php';
+
+// Definir la URL base para los archivos subidos.
+// Asumo que este script está en la raíz de tu proyecto (ej. htdocs/departamento_ig/index.php)
+// y que la carpeta 'uploads' está al mismo nivel.
+// Si este script está en un subdirectorio (ej. 'public/index.php'), ajusta la ruta a '../uploads/'.
+$upload_base_url = 'uploads/'; 
+
 $logo = '';
 $img = '';
-$stmt = $pdo->query("SELECT * FROM departamento LIMIT 1");
-$info = $stmt->fetch(PDO::FETCH_ASSOC);
+$info = [];
 
-if (!empty($info['logo_unge']) && file_exists(__DIR__ . '/api/' . $info['logo_unge'])) {
-  $logo = 'api/' . $info['logo_unge'];
+// --- Carga de Información del Departamento ---
+try {
+    $stmt = $pdo->query("SELECT * FROM departamento LIMIT 1");
+    $info = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // Verificar y construir rutas de imagen/logo si existen
+    if (!empty($info['logo_unge']) && file_exists($info['logo_unge'])) {
+        $logo = $info['logo_unge']; // La ruta ya debería ser correcta si se guardó con handle_upload
+    } else {
+        // Fallback si no hay logo o no se encuentra el archivo
+        $logo = $upload_base_url . 'default_logo_unge.png'; // Considera tener una imagen por defecto
+    }
+
+    if (!empty($info['imagen']) && file_exists($info['imagen'])) {
+        $img = $info['imagen']; // La ruta ya debería ser correcta
+    } else {
+        // Fallback si no hay imagen o no se encuentra el archivo
+        $img = $upload_base_url . 'default_image.png'; // Considera tener una imagen por defecto
+    }
+
+} catch (PDOException $e) {
+    // Log o manejar el error de forma más robusta en un entorno de producción
+    error_log("Error al cargar información del departamento: " . $e->getMessage());
+    $info = []; // Asegura que $info esté vacío en caso de error
+    $logo = $upload_base_url . 'default_logo_unge.png';
+    $img = $upload_base_url . 'default_image.png';
 }
-if (!empty($info['imagen']) && file_exists(__DIR__ . '/api/' . $info['imagen'])) {
-  $img = 'api/' . $info['imagen'];
+
+// --- Carga de Anuncios (Publicaciones) ---
+$anuncios = [];
+try {
+    $anuncios = $pdo->query("SELECT * FROM publicaciones WHERE visible = 1 ORDER BY creado_en DESC")->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Error al cargar publicaciones: " . $e->getMessage());
+    $anuncios = [];
 }
 
+$dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']; // Asegúrate de incluir Domingo si está en tu ENUM
 
-$anuncios = $pdo->query("SELECT * FROM publicaciones WHERE visible = 1 ORDER BY creado_en DESC")->fetchAll();
+$horarios = [];
+// --- Carga de Horarios ---
+try {
+    $sql = "
+    SELECT
+        h.id AS id_horario,
+        h.dia_semana AS dia,
+        TIME_FORMAT(h.hora_inicio, '%H:%i') AS hora_inicio,
+        TIME_FORMAT(h.hora_fin, '%H:%i') AS hora_fin,
+        a.nombre_asignatura AS asignatura,
+        u.nombre_completo AS profesor,
+        au.nombre_aula AS aula,
+        au.capacidad,
+        au.ubicacion,
+        c.id AS id_curso,
+        c.nombre_curso AS curso,
+        h.turno,
+        -- La columna 'grupo' no existe en tu esquema actual, se ha eliminado.
+        s.id AS id_semestre,
+        CONCAT(s.numero_semestre, ' - ', sa.nombre_anio) AS semestre
+    FROM horarios h
+    JOIN asignaturas a ON h.id_asignatura = a.id
+    JOIN profesores p ON h.id_profesor = p.id
+    JOIN usuarios u ON p.id_usuario = u.id -- Enlaza profesor con usuario para nombre_completo
+    JOIN aulas au ON h.id_aula = au.id
+    JOIN cursos c ON h.id_curso = c.id -- Horarios se une a cursos directamente por id_curso
+    JOIN semestres s ON h.id_semestre = s.id
+    JOIN anios_academicos sa ON s.id_anio_academico = sa.id -- Para obtener el nombre del año académico
+    ORDER BY c.nombre_curso, s.numero_semestre, h.hora_inicio, FIELD(h.dia_semana, 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo')";
 
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute();
+    $horarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Error al cargar horarios: " . $e->getMessage());
+    $horarios = [];
+}
 
-// Días de clase
-$dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-
-// Consulta general de horarios con información completa
-$sql = "
-SELECT 
-    h.id_horario,
-    h.dia,
-    TIME_FORMAT(h.hora_inicio, '%H:%i') AS hora_inicio,
-    TIME_FORMAT(h.hora_fin, '%H:%i') AS hora_fin,
-    a.nombre AS asignatura,
-    CONCAT(u.nombre, ' ', u.apellido) AS profesor,
-    au.nombre AS aula,
-    au.capacidad,
-    au.ubicacion,
-    c.id_curso,
-    c.nombre AS curso,
-    c.turno,
-    c.grupo,
-    s.id_semestre,
-    s.nombre AS semestre
-FROM horarios h
-JOIN asignaturas a ON h.id_asignatura = a.id_asignatura
-JOIN profesores p ON h.id_profesor = p.id_profesor
-JOIN usuarios u ON p.id_profesor = u.id_usuario
-JOIN aulas au ON h.aula_id = au.id_aula
-JOIN cursos c ON a.curso_id = c.id_curso
-JOIN semestres s ON a.semestre_id = s.id_semestre
-ORDER BY c.nombre, s.nombre, h.hora_inicio, FIELD(h.dia, 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado')";
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute();
-$horarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Organizar por curso-semestre
+// Organizar por curso-semestre (Ajustado para eliminar 'grupo' si no existe)
 $datos = [];
 $rangosUnicos = [];
 
 foreach ($horarios as $h) {
-  $clave = $h['curso'] . ' - Turno: ' . ucfirst($h['turno']) . ' - Grupo: ' . $h['grupo'] . ' | ' . $h['semestre'];
-  $rango = $h['hora_inicio'] . ' - ' . $h['hora_fin'];
+    // La clave ahora no incluye 'grupo' ya que no está en el esquema
+    $clave = $h['curso'] . ' - Turno: ' . ucfirst($h['turno']) . ' | Semestre: ' . $h['semestre'];
+    $rango = $h['hora_inicio'] . ' - ' . $h['hora_fin'];
 
-  if (!isset($datos[$clave])) {
-    $datos[$clave] = [];
-  }
+    if (!isset($datos[$clave])) {
+        $datos[$clave] = [];
+    }
 
-  if (!in_array($rango, $rangosUnicos)) {
-    $rangosUnicos[] = $rango;
-  }
+    if (!in_array($rango, $rangosUnicos)) {
+        $rangosUnicos[] = $rango;
+    }
 
-  $datos[$clave][$rango][$h['dia']][] = $h;
+    $datos[$clave][$rango][$h['dia']][] = $h;
 }
 
+// Contadores de usuarios
+$estudiantes = 0; // Renombrado para evitar conflicto con la variable $estudiantes de la tabla
+$profesores = 0; // Renombrado para evitar conflicto con la variable $profesores de la tabla
 
-/* profesores */
-$estudiantes = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol = 'estudiante'")->fetchColumn();
+try {
+    // Contar estudiantes a través de la tabla 'estudiantes' y su relación con 'usuarios' y 'roles'
+    $stmt_estudiantes = $pdo->prepare("
+        SELECT COUNT(e.id)
+        FROM estudiantes e
+        JOIN usuarios u ON e.id_usuario = u.id
+        JOIN roles r ON u.id_rol = r.id
+        WHERE r.nombre_rol = 'Estudiante'
+    ");
+    $stmt_estudiantes->execute();
+    $estudiantes = $stmt_estudiantes->fetchColumn();
+} catch (PDOException $e) {
+    error_log("Error al contar estudiantes: " . $e->getMessage());
+    $estudiantes = 0;
+}
 
-/* profesores */
-$profesores = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol = 'profesor'")->fetchColumn();
+try {
+    // Contar profesores a través de la tabla 'profesores' y su relación con 'usuarios' y 'roles'
+    $stmt_profesores = $pdo->prepare("
+        SELECT COUNT(p.id)
+        FROM profesores p
+        JOIN usuarios u ON p.id_usuario = u.id
+        JOIN roles r ON u.id_rol = r.id
+        WHERE r.nombre_rol = 'Profesor'
+    ");
+    $stmt_profesores->execute();
+    $profesores = $stmt_profesores->fetchColumn();
+} catch (PDOException $e) {
+    error_log("Error al contar profesores: " . $e->getMessage());
+    $profesores = 0;
+}
 
 ?>
+
 
 
 <!DOCTYPE html>
@@ -604,7 +674,7 @@ $profesores = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol = 'profesor'"
             <a class="nav-link active" href="#inicio">Inicio</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#programas">Horarios</a>
+            <a class="nav-link" href="#horarios">Horarios</a>
           </li>
           <li class="nav-item">
             <a class="nav-link" href="#noticias">Noticias</a>
@@ -671,6 +741,9 @@ $profesores = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol = 'profesor'"
 
   <!--Horarios de clase -->
   <?php if (!empty($horarios)): ?>
+    <section id="horarios" class="py-5 px-5 bg-light">
+
+    
     <h3 class="mb-3" data-aos="fade-up"><i class="bi bi-calendar3-week"></i> Horarios Académicos por Semestre</h3>
     <p class="text-muted" data-aos="fade-up" data-aos-delay="100">Se muestran los horarios organizados por semestre y
       curso.</p>
@@ -717,6 +790,7 @@ $profesores = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol = 'profesor'"
         </div>
       </div>
     <?php endforeach; ?>
+
     </section>
   <?php endif; ?>
 
@@ -862,7 +936,7 @@ $profesores = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol = 'profesor'"
 
         <!-- Cuerpo -->
         <div class="modal-body px-4 pt-4">
-          <form action="api/validar_login.php" method="POST" >
+          <form action="auth/login.php" method="POST" >
             <div class="mb-3">
               <label for="email" class="form-label fw-semibold">
                 <i class="bi bi-person-circle me-1"></i> Nombre

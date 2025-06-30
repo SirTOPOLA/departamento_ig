@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 30-06-2025 a las 04:28:21
+-- Tiempo de generación: 29-06-2025 a las 19:56:08
 -- Versión del servidor: 10.4.32-MariaDB
 -- Versión de PHP: 8.2.12
 
@@ -68,9 +68,7 @@ INSERT INTO `asignaturas` (`id`, `nombre_asignatura`, `creditos`, `id_prerequisi
 (6, 'Matemáticas discreta y lógica', 5.00, NULL, 1, 1),
 (7, 'Análisis Matemático', 5.00, NULL, 1, 1),
 (11, 'Escritura Técnica', 5.00, NULL, 1, 2),
-(12, 'Inglés II', 5.00, 4, 2, 2),
-(13, 'Tecnologia de la programación', 5.00, NULL, 2, 2),
-(14, 'Probabilidad y Estadisticas I', 5.00, NULL, 1, 2);
+(12, 'Inglés II', 5.00, 4, 2, 3);
 
 -- --------------------------------------------------------
 
@@ -127,13 +125,6 @@ CREATE TABLE `cvs_profesores` (
   `ruta_archivo` varchar(512) NOT NULL,
   `fecha_subida` datetime DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Volcado de datos para la tabla `cvs_profesores`
---
-
-INSERT INTO `cvs_profesores` (`id`, `id_profesor`, `nombre_archivo`, `ruta_archivo`, `fecha_subida`) VALUES
-(3, 1, 'Notas_2024 - 2025_LMN-A-25-1.pdf', 'uploads/cvs/1_cv_1751246814.pdf', '2025-06-30 02:26:54');
 
 -- --------------------------------------------------------
 
@@ -216,7 +207,7 @@ CREATE TABLE `horarios` (
 --
 
 INSERT INTO `horarios` (`id`, `id_semestre`, `id_asignatura`, `id_curso`, `id_profesor`, `id_aula`, `dia_semana`, `hora_inicio`, `hora_fin`, `turno`) VALUES
-(2, 2, 11, 1, 1, 1, 'Lunes', '12:00:00', '13:00:00', 'Tarde');
+(1, 2, 11, 1, 9, 1, 'Lunes', '12:00:00', '14:00:00', 'Tarde');
 
 -- --------------------------------------------------------
 
@@ -233,14 +224,6 @@ CREATE TABLE `inscripciones_estudiantes` (
   `confirmada` tinyint(1) DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `inscripciones_estudiantes`
---
-
-INSERT INTO `inscripciones_estudiantes` (`id`, `id_estudiante`, `id_semestre`, `id_asignatura`, `fecha_inscripcion`, `confirmada`) VALUES
-(7, 1, 2, 11, '2025-06-29 23:07:12', 1),
-(8, 1, 2, 14, '2025-06-29 23:07:12', 1);
-
 -- --------------------------------------------------------
 
 --
@@ -252,34 +235,9 @@ CREATE TABLE `notas` (
   `id_inscripcion` int(11) NOT NULL,
   `nota` decimal(5,2) DEFAULT NULL,
   `estado` enum('APROBADO','REPROBADO','PENDIENTE') DEFAULT 'PENDIENTE',
-  `estado_envio_acta` enum('BORRADOR','ENVIADA_PROFESOR','APROBADA_ADMIN','RECHAZADA_ADMIN') NOT NULL DEFAULT 'BORRADOR',
-  `fecha_envio_acta` datetime DEFAULT NULL,
-  `fecha_revision_admin` datetime DEFAULT NULL,
-  `id_admin_revisor` int(11) DEFAULT NULL,
-  `observaciones_admin` text DEFAULT NULL,
   `fecha_registro` datetime DEFAULT current_timestamp(),
-  `acta_final_confirmada` tinyint(1) NOT NULL DEFAULT 0
+  `acta_final_confirmada` tinyint(1) DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Estructura de tabla para la tabla `profesores`
---
-
-CREATE TABLE `profesores` (
-  `id` int(11) NOT NULL,
-  `id_usuario` int(11) NOT NULL,
-  `especialidad` varchar(255) DEFAULT NULL,
-  `grado_academico` varchar(100) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Volcado de datos para la tabla `profesores`
---
-
-INSERT INTO `profesores` (`id`, `id_usuario`, `especialidad`, `grado_academico`) VALUES
-(1, 9, 'Matematicas', 'Licenciatura');
 
 -- --------------------------------------------------------
 
@@ -299,8 +257,7 @@ CREATE TABLE `profesores_asignaturas_sugeridas` (
 --
 
 INSERT INTO `profesores_asignaturas_sugeridas` (`id`, `id_profesor`, `id_asignatura`, `fecha_sugerencia`) VALUES
-(1, 9, 11, '2025-06-29 15:08:19'),
-(2, 1, 6, '2025-06-30 01:02:32');
+(1, 9, 11, '2025-06-29 15:08:19');
 
 -- --------------------------------------------------------
 
@@ -408,7 +365,7 @@ CREATE TABLE `usuarios` (
 INSERT INTO `usuarios` (`id`, `nombre_usuario`, `password_hash`, `id_rol`, `nombre_completo`, `email`, `telefono`, `nip`, `estado`, `fecha_registro`) VALUES
 (1, 'hakim', '$2y$10$JixeWVxhWCJztjbrUA2lBuLaiQRSJfE9FBiGi/PMIE94r.5rTXkEK', 1, 'Hakim Pergentino', 'perduino@gmail.com', '222001122', '011243', 'Activo', '2025-06-29 11:27:07'),
 (9, 'salvador', '$2y$10$Va/cU6tiX4GLCBBtlDskRu3LL3NFba8iAU0O3o0kYQN..R7lzj8Uu', 3, 'Salvador Alo', 'salvador@gmail.com', '222011545', '0112430', 'Activo', '2025-06-29 14:48:52'),
-(12, 'melania', '$2y$10$7M/rOsyFDa.1FAv08iMrNuVC.Pz8JECDC2jCaQtzFdX5mD0tWS9/C', 2, 'Melania Sima', 'sima@gmail.com', '555120124', '0112431', 'Activo', '2025-06-29 16:19:54');
+(12, 'melania', '$2y$10$Kx8.UhN58IYs5TEbey65BOfxpn5q1YKN.xExwNKekORYEdmc/rbXe', 2, 'Melania Sima', 'sima@gmail.com', '555120124', '0112431', 'Activo', '2025-06-29 16:19:54');
 
 --
 -- Índices para tablas volcadas
@@ -485,8 +442,8 @@ ALTER TABLE `horarios`
   ADD KEY `fk_horario_semestre` (`id_semestre`),
   ADD KEY `fk_horario_asignatura` (`id_asignatura`),
   ADD KEY `fk_horario_curso` (`id_curso`),
-  ADD KEY `fk_horario_aula` (`id_aula`),
-  ADD KEY `fk_horario_profesor_new` (`id_profesor`);
+  ADD KEY `fk_horario_profesor` (`id_profesor`),
+  ADD KEY `fk_horario_aula` (`id_aula`);
 
 --
 -- Indices de la tabla `inscripciones_estudiantes`
@@ -502,15 +459,7 @@ ALTER TABLE `inscripciones_estudiantes`
 --
 ALTER TABLE `notas`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `fk_nota_inscripcion` (`id_inscripcion`),
-  ADD KEY `fk_notas_admin_revisor` (`id_admin_revisor`);
-
---
--- Indices de la tabla `profesores`
---
-ALTER TABLE `profesores`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `idx_profesor_id_usuario` (`id_usuario`);
+  ADD KEY `fk_nota_inscripcion` (`id_inscripcion`);
 
 --
 -- Indices de la tabla `profesores_asignaturas_sugeridas`
@@ -572,7 +521,7 @@ ALTER TABLE `anios_academicos`
 -- AUTO_INCREMENT de la tabla `asignaturas`
 --
 ALTER TABLE `asignaturas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT de la tabla `aulas`
@@ -590,7 +539,7 @@ ALTER TABLE `cursos`
 -- AUTO_INCREMENT de la tabla `cvs_profesores`
 --
 ALTER TABLE `cvs_profesores`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT de la tabla `departamento`
@@ -614,13 +563,13 @@ ALTER TABLE `historial_academico`
 -- AUTO_INCREMENT de la tabla `horarios`
 --
 ALTER TABLE `horarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `inscripciones_estudiantes`
 --
 ALTER TABLE `inscripciones_estudiantes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT de la tabla `notas`
@@ -629,16 +578,10 @@ ALTER TABLE `notas`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT de la tabla `profesores`
---
-ALTER TABLE `profesores`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
-
---
 -- AUTO_INCREMENT de la tabla `profesores_asignaturas_sugeridas`
 --
 ALTER TABLE `profesores_asignaturas_sugeridas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `publicaciones`
@@ -710,7 +653,7 @@ ALTER TABLE `horarios`
   ADD CONSTRAINT `fk_horario_asignatura` FOREIGN KEY (`id_asignatura`) REFERENCES `asignaturas` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_horario_aula` FOREIGN KEY (`id_aula`) REFERENCES `aulas` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_horario_curso` FOREIGN KEY (`id_curso`) REFERENCES `cursos` (`id`) ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_horario_profesor_new` FOREIGN KEY (`id_profesor`) REFERENCES `profesores` (`id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_horario_profesor` FOREIGN KEY (`id_profesor`) REFERENCES `usuarios` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_horario_semestre` FOREIGN KEY (`id_semestre`) REFERENCES `semestres` (`id`) ON UPDATE CASCADE;
 
 --
@@ -725,14 +668,7 @@ ALTER TABLE `inscripciones_estudiantes`
 -- Filtros para la tabla `notas`
 --
 ALTER TABLE `notas`
-  ADD CONSTRAINT `fk_nota_inscripcion` FOREIGN KEY (`id_inscripcion`) REFERENCES `inscripciones_estudiantes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_notas_admin_revisor` FOREIGN KEY (`id_admin_revisor`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
---
--- Filtros para la tabla `profesores`
---
-ALTER TABLE `profesores`
-  ADD CONSTRAINT `fk_profesor_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_nota_inscripcion` FOREIGN KEY (`id_inscripcion`) REFERENCES `inscripciones_estudiantes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Filtros para la tabla `profesores_asignaturas_sugeridas`

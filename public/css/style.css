@@ -1,0 +1,145 @@
+/* Custom CSS for Sidebar Layout */
+
+body {
+    overflow-x: hidden;
+}
+
+#wrapper {
+    display: flex; /* Makes sidebar and content display side-by-side */
+}
+
+#sidebar-wrapper {
+    min-height: 100vh; /* Full height of the viewport */
+    margin-left: -15rem; /* Hides sidebar by default */
+    transition: margin .25s ease-out; /* Smooth transition for toggling */
+    width: 15rem; /* Fixed width of the sidebar */
+    position: fixed; /* Makes sidebar fixed */
+    z-index: 1000; /* Ensures sidebar is above other content */
+    top: 0;
+    left: 0;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.2); /* Subtle shadow for depth */
+}
+
+#sidebar-wrapper .sidebar-heading {
+    padding: 0.875rem 1.25rem;
+    font-size: 1.2rem;
+    color: #fff;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#sidebar-wrapper .list-group {
+    width: 15rem;
+}
+
+#sidebar-wrapper .list-group-item {
+    border: none; /* Remove default list-group-item borders */
+    padding: 1rem 1.25rem;
+    font-size: 0.95rem;
+    color: #f8f9fa; /* Light text for dark background */
+}
+
+#sidebar-wrapper .list-group-item:hover {
+    background-color: rgba(255, 255, 255, 0.1); /* Subtle hover effect */
+    color: #fff;
+}
+
+#sidebar-wrapper .list-group-item.active {
+    background-color: #007bff; /* Primary blue for active link */
+    color: #fff;
+    font-weight: bold;
+    border-radius: 0; /* Ensure no rounded corners for active item */
+}
+#sidebar-wrapper .list-group-item.active i {
+    color: #fff; /* Ensure icon is white when active */
+}
+
+
+#page-content-wrapper {
+    min-width: 100vw;
+    margin-left: 0; /* By default, content takes full width */
+    padding-left: 15rem; /* Pushes content to the right when sidebar is open */
+    transition: margin .25s ease-out, padding-left .25s ease-out;
+}
+
+#wrapper.toggled #sidebar-wrapper {
+    margin-left: 0; /* Shows sidebar */
+}
+
+#wrapper.toggled #page-content-wrapper {
+    margin-left: 15rem; /* Pushes content to the right */
+    padding-left: 0; /* Remove left padding as content is shifted by margin */
+}
+
+
+/* Media queries for responsiveness */
+@media (min-width: 768px) {
+    #sidebar-wrapper {
+        margin-left: 0; /* Sidebar always visible on larger screens */
+    }
+
+    #page-content-wrapper {
+        min-width: 0;
+        width: 100%; /* Content takes remaining width */
+        padding-left: 15rem; /* Content starts after sidebar */
+    }
+
+    #wrapper.toggled #sidebar-wrapper {
+        margin-left: -15rem; /* Hides sidebar on larger screens when toggled */
+    }
+
+    #wrapper.toggled #page-content-wrapper {
+        margin-left: 0; /* Content goes back to full width */
+        padding-left: 0;
+    }
+}
+
+/* General Layout Adjustments */
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.footer {
+    position: relative;
+    bottom: 0;
+    width: 100%;
+}
+
+/* Ensure the main content pushes the footer down */
+#page-content-wrapper {
+    flex-grow: 1; /* Allows content area to grow and push footer down */
+}
+
+/* Adjust top margin for body to account for fixed navbar if you add one */
+/* body { padding-top: 56px; }  If you want a fixed top navbar */
+
+/* Card styling */
+.card {
+    border-radius: 0.5rem;
+    border: none;
+}
+
+.card-title {
+    font-weight: bold;
+    color: #343a40;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+    border-color: #0056b3;
+}
+
+/* General text and link colors */
+a {
+    color: #007bff;
+}
+a:hover {
+    color: #0056b3;
+}
