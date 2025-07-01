@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 30-06-2025 a las 04:28:21
+-- Tiempo de generación: 01-07-2025 a las 15:05:04
 -- Versión del servidor: 10.4.32-MariaDB
--- Versión de PHP: 8.2.12
+-- Versión de PHP: 8.0.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -18,7 +18,7 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Base de datos: `departamento_ig`
+-- Base de datos: `departemento`
 --
 
 -- --------------------------------------------------------
@@ -117,6 +117,29 @@ INSERT INTO `cursos` (`id`, `nombre_curso`, `descripcion`, `created_at`, `update
 -- --------------------------------------------------------
 
 --
+-- Estructura de tabla para la tabla `curso_estudiante`
+--
+
+CREATE TABLE `curso_estudiante` (
+  `id` int(11) NOT NULL,
+  `id_estudiante` int(11) NOT NULL,
+  `id_curso` int(11) NOT NULL,
+  `id_anio` int(11) NOT NULL,
+  `estado` enum('activo','finalizado','reprobado') DEFAULT 'activo',
+  `fecha_registro` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `curso_estudiante`
+--
+
+INSERT INTO `curso_estudiante` (`id`, `id_estudiante`, `id_curso`, `id_anio`, `estado`, `fecha_registro`) VALUES
+(6, 11, 1, 1, 'activo', '2025-07-01 12:27:02'),
+(7, 12, 1, 1, 'activo', '2025-07-01 13:01:54');
+
+-- --------------------------------------------------------
+
+--
 -- Estructura de tabla para la tabla `cvs_profesores`
 --
 
@@ -155,6 +178,13 @@ CREATE TABLE `departamento` (
   `horario` varchar(30) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Volcado de datos para la tabla `departamento`
+--
+
+INSERT INTO `departamento` (`id_departamento`, `nombre`, `universidad`, `historia`, `imagen`, `logo_unge`, `logo_pais`, `info_matricula`, `direccion`, `telefono`, `horario`) VALUES
+(1, 'DEPARTAMENTO DE INFOIRMATICA DE GESTION', 'UNIVERSIDAD NACIONAL DE GE', '', NULL, NULL, NULL, '', '', '', '');
+
 -- --------------------------------------------------------
 
 --
@@ -164,17 +194,18 @@ CREATE TABLE `departamento` (
 CREATE TABLE `estudiantes` (
   `id` int(11) NOT NULL,
   `id_usuario` int(11) NOT NULL,
-  `codigo_registro` varchar(50) DEFAULT NULL,
-  `id_anio_inicio` int(11) NOT NULL,
-  `id_curso_inicio` int(11) NOT NULL
+  `codigo_registro` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Volcado de datos para la tabla `estudiantes`
 --
 
-INSERT INTO `estudiantes` (`id`, `id_usuario`, `codigo_registro`, `id_anio_inicio`, `id_curso_inicio`) VALUES
-(1, 12, 'FCE214', 1, 1);
+INSERT INTO `estudiantes` (`id`, `id_usuario`, `codigo_registro`) VALUES
+(1, 12, 'FCE214'),
+(2, 13, 'FCE245'),
+(11, 22, 'FCE7045'),
+(12, 23, 'FCE7245');
 
 -- --------------------------------------------------------
 
@@ -284,6 +315,26 @@ INSERT INTO `profesores` (`id`, `id_usuario`, `especialidad`, `grado_academico`)
 -- --------------------------------------------------------
 
 --
+-- Estructura de tabla para la tabla `profesores_asignaturas_asignadas`
+--
+
+CREATE TABLE `profesores_asignaturas_asignadas` (
+  `id` int(11) NOT NULL,
+  `id_profesor` int(11) NOT NULL,
+  `id_asignatura` int(11) NOT NULL,
+  `fecha_asignacion` datetime DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `profesores_asignaturas_asignadas`
+--
+
+INSERT INTO `profesores_asignaturas_asignadas` (`id`, `id_profesor`, `id_asignatura`, `fecha_asignacion`) VALUES
+(1, 1, 11, '2025-07-01 13:56:26');
+
+-- --------------------------------------------------------
+
+--
 -- Estructura de tabla para la tabla `profesores_asignaturas_sugeridas`
 --
 
@@ -321,6 +372,13 @@ CREATE TABLE `publicaciones` (
   `creado_en` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Volcado de datos para la tabla `publicaciones`
+--
+
+INSERT INTO `publicaciones` (`id_publicacion`, `titulo`, `contenido`, `tipo`, `imagen`, `archivo_adjunto`, `fecha_evento`, `visible`, `creado_por`, `creado_en`) VALUES
+(1, 'EDDED', 'DEDEDE', 'noticia', '../uploads/6863c2bd501bf.jpg', NULL, '2025-07-01', 1, 1, '2025-07-01 11:13:01');
+
 -- --------------------------------------------------------
 
 --
@@ -336,6 +394,13 @@ CREATE TABLE `requisitos_matricula` (
   `archivo_modelo` text DEFAULT NULL,
   `visible` tinyint(1) DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `requisitos_matricula`
+--
+
+INSERT INTO `requisitos_matricula` (`id_requisito`, `titulo`, `descripcion`, `tipo`, `obligatorio`, `archivo_modelo`, `visible`) VALUES
+(1, 'MATRUCULA', 'ADEADEW', 'antiguo', 1, '../uploads/6863c30040798.pdf', 1);
 
 -- --------------------------------------------------------
 
@@ -408,7 +473,10 @@ CREATE TABLE `usuarios` (
 INSERT INTO `usuarios` (`id`, `nombre_usuario`, `password_hash`, `id_rol`, `nombre_completo`, `email`, `telefono`, `nip`, `estado`, `fecha_registro`) VALUES
 (1, 'hakim', '$2y$10$JixeWVxhWCJztjbrUA2lBuLaiQRSJfE9FBiGi/PMIE94r.5rTXkEK', 1, 'Hakim Pergentino', 'perduino@gmail.com', '222001122', '011243', 'Activo', '2025-06-29 11:27:07'),
 (9, 'salvador', '$2y$10$Va/cU6tiX4GLCBBtlDskRu3LL3NFba8iAU0O3o0kYQN..R7lzj8Uu', 3, 'Salvador Alo', 'salvador@gmail.com', '222011545', '0112430', 'Activo', '2025-06-29 14:48:52'),
-(12, 'melania', '$2y$10$7M/rOsyFDa.1FAv08iMrNuVC.Pz8JECDC2jCaQtzFdX5mD0tWS9/C', 2, 'Melania Sima', 'sima@gmail.com', '555120124', '0112431', 'Activo', '2025-06-29 16:19:54');
+(12, 'melania', '$2y$10$7M/rOsyFDa.1FAv08iMrNuVC.Pz8JECDC2jCaQtzFdX5mD0tWS9/C', 2, 'Melania Sima', 'sima@gmail.com', '555120124', '0112431', 'Activo', '2025-06-29 16:19:54'),
+(13, 'mia', '$2y$10$n5is0tAZ/.uL47tQfLUk.e3SSVPxi03hJBjTK8GCFDq6sl6cFWaZG', 2, 'Mia Antonia Supe', 'mia@gmail.com', '222457487', '0014521', 'Activo', '2025-07-01 11:59:12'),
+(22, 'lucia', '$2y$10$xbuencvwlP43ow9tkj.OhOXWH28uVdivIKW/BF1qWn7wi1xVoyi5O', 2, 'Lucia Boko', 'lucia@gmail.com', '222457896', '000914578', 'Activo', '2025-07-01 13:27:02'),
+(23, 'monica', '$2y$10$8daDKLkojNalZU.Wt2FGCuRLO9aSKli8SQfN/EBH26J179ZRCm.nq', 2, 'monica mons', 'monica@gmail.com', '222145014', '0012101', 'Activo', '2025-07-01 14:01:54');
 
 --
 -- Índices para tablas volcadas
@@ -446,6 +514,16 @@ ALTER TABLE `cursos`
   ADD UNIQUE KEY `nombre_curso` (`nombre_curso`);
 
 --
+-- Indices de la tabla `curso_estudiante`
+--
+ALTER TABLE `curso_estudiante`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `idx_estudiante_curso_anio` (`id_estudiante`,`id_curso`,`id_anio`),
+  ADD KEY `fk_cursoestudiante_estudiante` (`id_estudiante`),
+  ADD KEY `fk_cursoestudiante_curso` (`id_curso`),
+  ADD KEY `fk_cursoestudiante_anio` (`id_anio`);
+
+--
 -- Indices de la tabla `cvs_profesores`
 --
 ALTER TABLE `cvs_profesores`
@@ -464,9 +542,7 @@ ALTER TABLE `departamento`
 ALTER TABLE `estudiantes`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `id_usuario` (`id_usuario`),
-  ADD UNIQUE KEY `codigo_registro` (`codigo_registro`),
-  ADD KEY `fk_estudiante_anio_inicio` (`id_anio_inicio`),
-  ADD KEY `fk_estudiante_curso_inicio` (`id_curso_inicio`);
+  ADD UNIQUE KEY `codigo_registro` (`codigo_registro`);
 
 --
 -- Indices de la tabla `historial_academico`
@@ -511,6 +587,14 @@ ALTER TABLE `notas`
 ALTER TABLE `profesores`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `idx_profesor_id_usuario` (`id_usuario`);
+
+--
+-- Indices de la tabla `profesores_asignaturas_asignadas`
+--
+ALTER TABLE `profesores_asignaturas_asignadas`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `id_profesor` (`id_profesor`,`id_asignatura`),
+  ADD KEY `id_asignatura` (`id_asignatura`);
 
 --
 -- Indices de la tabla `profesores_asignaturas_sugeridas`
@@ -587,6 +671,12 @@ ALTER TABLE `cursos`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
+-- AUTO_INCREMENT de la tabla `curso_estudiante`
+--
+ALTER TABLE `curso_estudiante`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+
+--
 -- AUTO_INCREMENT de la tabla `cvs_profesores`
 --
 ALTER TABLE `cvs_profesores`
@@ -596,13 +686,13 @@ ALTER TABLE `cvs_profesores`
 -- AUTO_INCREMENT de la tabla `departamento`
 --
 ALTER TABLE `departamento`
-  MODIFY `id_departamento` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_departamento` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `estudiantes`
 --
 ALTER TABLE `estudiantes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT de la tabla `historial_academico`
@@ -635,6 +725,12 @@ ALTER TABLE `profesores`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
+-- AUTO_INCREMENT de la tabla `profesores_asignaturas_asignadas`
+--
+ALTER TABLE `profesores_asignaturas_asignadas`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
 -- AUTO_INCREMENT de la tabla `profesores_asignaturas_sugeridas`
 --
 ALTER TABLE `profesores_asignaturas_sugeridas`
@@ -644,13 +740,13 @@ ALTER TABLE `profesores_asignaturas_sugeridas`
 -- AUTO_INCREMENT de la tabla `publicaciones`
 --
 ALTER TABLE `publicaciones`
-  MODIFY `id_publicacion` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_publicacion` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `requisitos_matricula`
 --
 ALTER TABLE `requisitos_matricula`
-  MODIFY `id_requisito` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_requisito` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `roles`
@@ -668,7 +764,7 @@ ALTER TABLE `semestres`
 -- AUTO_INCREMENT de la tabla `usuarios`
 --
 ALTER TABLE `usuarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
 
 --
 -- Restricciones para tablas volcadas
@@ -682,6 +778,14 @@ ALTER TABLE `asignaturas`
   ADD CONSTRAINT `fk_prerequisito` FOREIGN KEY (`id_prerequisito`) REFERENCES `asignaturas` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
+-- Filtros para la tabla `curso_estudiante`
+--
+ALTER TABLE `curso_estudiante`
+  ADD CONSTRAINT `fk_cursoestudiante_anio` FOREIGN KEY (`id_anio`) REFERENCES `anios_academicos` (`id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_cursoestudiante_curso` FOREIGN KEY (`id_curso`) REFERENCES `cursos` (`id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_cursoestudiante_estudiante` FOREIGN KEY (`id_estudiante`) REFERENCES `estudiantes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
 -- Filtros para la tabla `cvs_profesores`
 --
 ALTER TABLE `cvs_profesores`
@@ -691,8 +795,6 @@ ALTER TABLE `cvs_profesores`
 -- Filtros para la tabla `estudiantes`
 --
 ALTER TABLE `estudiantes`
-  ADD CONSTRAINT `fk_estudiante_anio_inicio` FOREIGN KEY (`id_anio_inicio`) REFERENCES `anios_academicos` (`id`) ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_estudiante_curso_inicio` FOREIGN KEY (`id_curso_inicio`) REFERENCES `cursos` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_estudiante_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
@@ -733,6 +835,13 @@ ALTER TABLE `notas`
 --
 ALTER TABLE `profesores`
   ADD CONSTRAINT `fk_profesor_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Filtros para la tabla `profesores_asignaturas_asignadas`
+--
+ALTER TABLE `profesores_asignaturas_asignadas`
+  ADD CONSTRAINT `profesores_asignaturas_asignadas_ibfk_1` FOREIGN KEY (`id_profesor`) REFERENCES `profesores` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `profesores_asignaturas_asignadas_ibfk_2` FOREIGN KEY (`id_asignatura`) REFERENCES `asignaturas` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Filtros para la tabla `profesores_asignaturas_sugeridas`

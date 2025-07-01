@@ -25,10 +25,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
 
             // 1. Obtener los IDs (profesor y usuario) y confirmar el rol antes de proceder
             $stmt_check_profesor = $pdo->prepare("
-                SELECT 
+                SELECT
                     p.id AS profesor_id,        -- ID de la tabla profesores
                     u.id AS user_id,            -- ID de la tabla usuarios asociado
-                    r.nombre_rol 
+                    r.nombre_rol
                 FROM profesores p
                 JOIN usuarios u ON p.id_usuario = u.id
                 JOIN roles r ON u.id_rol = r.id
@@ -66,12 +66,17 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
                     $stmt_delete_sugeridas->bindParam(':profesor_id', $actual_profesor_id, PDO::PARAM_INT);
                     $stmt_delete_sugeridas->execute();
                     
-                    // 5. Eliminar el registro del profesor de la tabla 'profesores'
+                    // 5. Eliminar asignaturas asignadas asociadas (referencia: `id_profesor` en `profesores_asignaturas_asignadas` es `profesores.id`)
+                    $stmt_delete_asignadas = $pdo->prepare("DELETE FROM profesores_asignaturas_asignadas WHERE id_profesor = :profesor_id");
+                    $stmt_delete_asignadas->bindParam(':profesor_id', $actual_profesor_id, PDO::PARAM_INT);
+                    $stmt_delete_asignadas->execute();
+
+                    // 6. Eliminar el registro del profesor de la tabla 'profesores'
                     $stmt_delete_from_profesores_table = $pdo->prepare("DELETE FROM profesores WHERE id = :profesor_id");
                     $stmt_delete_from_profesores_table->bindParam(':profesor_id', $actual_profesor_id, PDO::PARAM_INT);
                     $stmt_delete_from_profesores_table->execute();
 
-                    // 6. Finalmente, eliminar el usuario (profesor) de la tabla 'usuarios'
+                    // 7. Finalmente, eliminar el usuario (profesor) de la tabla 'usuarios'
                     // Esto se hace al final para evitar problemas de FK antes de eliminar el registro de profesores.
                     $stmt_delete_user = $pdo->prepare("DELETE FROM usuarios WHERE id = :user_id");
                     $stmt_delete_user->bindParam(':user_id', $associated_user_id, PDO::PARAM_INT);
@@ -102,20 +107,21 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
 // Esta consulta recupera los datos de los profesores para mostrarlos en la tabla
 try {
     $stmt_profesores = $pdo->query("
-        SELECT 
+        SELECT
             u.id AS user_id,        -- ID de la tabla usuarios
-            u.nombre_usuario, 
-            u.nombre_completo, 
-            u.email, 
-            u.telefono, 
+            u.nombre_usuario,
+            u.nombre_completo,
+            u.email,
+            u.telefono,
             u.estado,
             p.id AS profesor_id,    -- ID de la tabla profesores (¡Importante para las acciones de eliminar/detalles!)
-            p.especialidad, 
+            p.especialidad,
             p.grado_academico,
-            (SELECT COUNT(*) FROM cvs_profesores WHERE id_profesor = p.id) AS total_cvs -- Conteo de CVs usando p.id
+            (SELECT COUNT(*) FROM cvs_profesores WHERE id_profesor = p.id) AS total_cvs, -- Conteo de CVs usando p.id
+            (SELECT COUNT(*) FROM profesores_asignaturas_asignadas WHERE id_profesor = p.id) AS total_asignaturas_asignadas
         FROM usuarios u
         JOIN roles r ON u.id_rol = r.id
-        JOIN profesores p ON u.id = p.id_usuario 
+        JOIN profesores p ON u.id = p.id_usuario
         WHERE r.nombre_rol = 'Profesor'
         ORDER BY u.nombre_completo ASC
     ");
@@ -155,31 +161,42 @@ try {
             <table class="table table-hover table-striped" id="professorsTable">
                 <thead>
                     <tr>
-                        <th>ID Profesor</th> <th>Nombre Completo</th>
+                        <th>ID Profesor</th>
+                        <th>Nombre Completo</th>
                         <th>Nombre de Usuario</th>
                         <th>Email</th>
                         <th>Teléfono</th>
                         <th>Estado</th>
                         <th>CVs</th>
-                        <th>Acciones</th>
+                        <th>Asignaturas Asignadas</th> <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (count($profesores) > 0): ?>
                         <?php foreach ($profesores as $profesor): ?>
-                            <tr data-profesor_id="<?php echo htmlspecialchars($profesor['profesor_id']); ?>"> 
-                                <td><?php echo htmlspecialchars($profesor['profesor_id']); ?></td> <td><?php echo htmlspecialchars($profesor['nombre_completo']); ?></td>
+                            <tr data-profesor_id="<?php echo htmlspecialchars($profesor['profesor_id']); ?>">
+                                <td><?php echo htmlspecialchars($profesor['profesor_id']); ?></td>
+                                <td><?php echo htmlspecialchars($profesor['nombre_completo']); ?></td>
                                 <td><?php echo htmlspecialchars($profesor['nombre_usuario']); ?></td>
                                 <td><?php echo htmlspecialchars($profesor['email'] ?? 'N/A'); ?></td>
                                 <td><?php echo htmlspecialchars($profesor['telefono'] ?? 'N/A'); ?></td>
                                 <td>
                                     <span class="badge <?php 
                                         echo ($profesor['estado'] == 'Activo' ? 'bg-success' : 
-                                              ($profesor['estado'] == 'Inactivo' ? 'bg-warning text-dark' : 'bg-danger')); ?>">
+                                            ($profesor['estado'] == 'Inactivo' ? 'bg-warning text-dark' : 'bg-danger')); ?>">
                                         <?php echo htmlspecialchars($profesor['estado']); ?>
                                     </span>
                                 </td>
                                 <td><?php echo htmlspecialchars($profesor['total_cvs']); ?></td>
+                                <td>
+                                    <button type="button" class="btn btn-primary btn-sm view-assigned-subjects-btn"
+                                            title="Ver Asignaturas Asignadas" data-bs-toggle="modal"
+                                            data-bs-target="#professorDetailsModal"
+                                            data-profesor_id="<?php echo htmlspecialchars($profesor['profesor_id']); ?>"
+                                            data-nombre_completo="<?php echo htmlspecialchars($profesor['nombre_completo']); ?>">
+                                        <i class="fas fa-book"></i> <?php echo htmlspecialchars($profesor['total_asignaturas_asignadas']); ?>
+                                    </button>
+                                </td>
                                 <td>
                                     <button type="button" class="btn btn-info btn-sm view-details-btn me-1"
                                             title="Ver Detalles y Gestionar" data-bs-toggle="modal"
@@ -188,13 +205,9 @@ try {
                                             data-nombre_completo="<?php echo htmlspecialchars($profesor['nombre_completo']); ?>">
                                         <i class="fas fa-eye"></i> Detalles
                                     </button>
-                                  <!--   <a href="users.php?action=edit&id=<?php echo htmlspecialchars($profesor['user_id']); ?>"
-                                        class="btn btn-primary btn-sm me-1" title="Editar Perfil General de Usuario">
-                                        <i class="fas fa-user-edit"></i>
-                                    </a> -->
                                     <a href="professors.php?action=delete&id=<?php echo htmlspecialchars($profesor['profesor_id']); ?>"
                                         class="btn btn-danger btn-sm delete-btn" title="Eliminar Profesor"
-                                        onclick="return confirm('¿Estás seguro de que quieres eliminar a este profesor y todos sus datos asociados (CVs, sugerencias)? Esta acción es irreversible y solo se permitirá si no tiene horarios asignados.');">
+                                        onclick="return confirm('¿Estás seguro de que quieres eliminar a este profesor y todos sus datos asociados (CVs, sugerencias, asignaturas asignadas)? Esta acción es irreversible y solo se permitirá si no tiene horarios asignados.');">
                                         <i class="fas fa-trash"></i>
                                     </a>
                                 </td>
@@ -202,7 +215,7 @@ try {
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="8" class="text-center">No hay profesores registrados.</td>
+                            <td colspan="9" class="text-center">No hay profesores registrados.</td>
                         </tr>
                     <?php endif; ?>
                 </tbody>
@@ -223,7 +236,7 @@ try {
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="current_profesor_id"> 
+                <input type="hidden" id="current_profesor_id">
 
                 <ul class="nav nav-tabs mb-3" id="profDetailsTab" role="tablist">
                     <li class="nav-item" role="presentation">
@@ -233,7 +246,12 @@ try {
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="assignments-tab" data-bs-toggle="tab"
                             data-bs-target="#assignments-content" type="button" role="tab"
-                            aria-controls="assignments-content" aria-selected="false">Asignar Asignaturas</button>
+                            aria-controls="assignments-content" aria-selected="false">Asignar Asignaturas Sugeridas</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="assigned-subjects-tab" data-bs-toggle="tab"
+                            data-bs-target="#assigned-subjects-content" type="button" role="tab"
+                            aria-controls="assigned-subjects-content" aria-selected="false">Asignaturas Asignadas</button>
                     </li>
                 </ul>
 
@@ -258,11 +276,10 @@ try {
                     </div>
 
                     <div class="tab-pane fade" id="assignments-content" role="tabpanel" aria-labelledby="assignments-tab">
-                        <h6>Asignar Asignatura al Profesor</h6>
+                        <h6>Asignar Asignatura Sugerida al Profesor</h6>
                         <form id="assignSubjectForm" class="mb-4">
-                            <input type="hidden" name="action" value="assign_subject">
-                            <input type="hidden" name="id_profesor" id="assign_profesor_id"> <div class="input-group">
-                                <select class="form-select" id="availableSubjects" name="id_asignatura" required>
+                            <input type="hidden" name="action" value="assign_subject_sugerida"> <input type="hidden" name="id_profesor" id="assign_profesor_id_sugerida"> <div class="input-group">
+                                <select class="form-select" id="availableSubjectsSugeridas" name="id_asignatura" required>
                                     <option value="">Seleccione una asignatura...</option>
                                     <?php foreach ($asignaturas_disponibles as $asig): ?>
                                         <option value="<?php echo htmlspecialchars($asig['id']); ?>">
@@ -270,13 +287,37 @@ try {
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
-                                <button class="btn btn-outline-secondary" type="submit"><i class="fas fa-plus me-2"></i> Asignar</button>
+                                <button class="btn btn-outline-secondary" type="submit"><i class="fas fa-plus me-2"></i> Asignar Sugerida</button>
                             </div>
                         </form>
 
                         <h6>Asignaturas Preferidas/Sugeridas por el Profesor (del CV o manual)</h6>
                         <div id="suggestedSubjectsList" class="list-group">
                             <p class="text-center text-muted">Cargando asignaturas sugeridas...</p>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="assigned-subjects-content" role="tabpanel" aria-labelledby="assigned-subjects-tab">
+                        <h6>Asignar Nueva Asignatura (Oficial)</h6>
+                        <form id="assignOfficialSubjectForm" class="mb-4">
+                            <input type="hidden" name="action" value="assign_subject_oficial">
+                            <input type="hidden" name="id_profesor" id="assign_profesor_id_oficial">
+                            <div class="input-group">
+                                <select class="form-select" id="availableSubjectsOficiales" name="id_asignatura" required>
+                                    <option value="">Seleccione una asignatura...</option>
+                                    <?php foreach ($asignaturas_disponibles as $asig): ?>
+                                        <option value="<?php echo htmlspecialchars($asig['id']); ?>">
+                                            <?php echo htmlspecialchars($asig['nombre_asignatura']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button class="btn btn-success" type="submit"><i class="fas fa-check-circle me-2"></i> Asignar Oficialmente</button>
+                            </div>
+                        </form>
+
+                        <h6>Asignaturas Oficialmente Asignadas al Profesor</h6>
+                        <div id="assignedSubjectsList" class="list-group">
+                            <p class="text-center text-muted">Cargando asignaturas asignadas...</p>
                         </div>
                     </div>
                 </div>
@@ -333,21 +374,48 @@ try {
     // --- Funcionalidad para el Modal de Detalles del Profesor ---
     document.querySelectorAll('.view-details-btn').forEach(button => {
         button.addEventListener('click', function () {
-            // El ID que se pasa aquí es el profesor_id (de la tabla profesores)
-            const profesorId = this.dataset.profesor_id; 
+            const profesorId = this.dataset.profesor_id;
             const profesorNombre = this.dataset.nombre_completo;
 
             // Establecer IDs en los campos ocultos del modal para su uso en formularios AJAX
             document.getElementById('current_profesor_id').value = profesorId;
             document.getElementById('cv_profesor_id').value = profesorId;
-            document.getElementById('assign_profesor_id').value = profesorId;
+            document.getElementById('assign_profesor_id_sugerida').value = profesorId; // ID para asignaturas sugeridas
+            document.getElementById('assign_profesor_id_oficial').value = profesorId; // ID para asignaturas asignadas
             document.getElementById('profNameDisplay').innerText = profesorNombre;
 
-            // Cargar CVs del profesor y asignaturas sugeridas/asignadas
+            // Asegurarse de que la pestaña de CVs se muestre primero por defecto
+            const cvTab = new bootstrap.Tab(document.getElementById('cv-tab'));
+            cvTab.show();
+
+            // Cargar CVs del profesor, asignaturas sugeridas y asignaturas asignadas
             loadProfessorCvs(profesorId);
             loadSuggestedSubjects(profesorId);
+            loadAssignedSubjects(profesorId); // Nueva llamada
         });
     });
+
+    // Nuevo Event Listener para el botón "Ver Asignaturas Asignadas"
+    document.querySelectorAll('.view-assigned-subjects-btn').forEach(button => {
+        button.addEventListener('click', function () {
+            const profesorId = this.dataset.profesor_id;
+            const profesorNombre = this.dataset.nombre_completo;
+
+            document.getElementById('current_profesor_id').value = profesorId;
+            document.getElementById('cv_profesor_id').value = profesorId;
+            document.getElementById('assign_profesor_id_sugerida').value = profesorId;
+            document.getElementById('assign_profesor_id_oficial').value = profesorId;
+            document.getElementById('profNameDisplay').innerText = profesorNombre;
+
+            // Activar la pestaña de "Asignaturas Asignadas"
+            const assignedSubjectsTab = new bootstrap.Tab(document.getElementById('assigned-subjects-tab'));
+            assignedSubjectsTab.show();
+
+            // Cargar solo las asignaturas asignadas
+            loadAssignedSubjects(profesorId);
+        });
+    });
+
 
     // --- Cargar CVs del Profesor vía AJAX ---
     function loadProfessorCvs(profesorId) {
@@ -421,7 +489,7 @@ try {
                     showToast('success', data.message);
                     document.getElementById('cvFile').value = ''; // Limpiar campo de archivo
                     loadProfessorCvs(profesorId); // Recargar CVs
-                    updateProfessorsTableDisplay(); // Actualizar la tabla principal
+                    updateProfessorsTableDisplay(); // Actualizar la tabla principal (esto es un placeholder, realmente necesitas recargar la tabla PHP o actualizar el conteo en el DOM)
                 } else {
                     showToast('danger', data.message);
                 }
@@ -452,7 +520,7 @@ try {
                 if (data.success) {
                     showToast('success', data.message);
                     loadProfessorCvs(profesorId); // Recargar CVs
-                    updateProfessorsTableDisplay(); // Actualizar la tabla principal
+                    updateProfessorsTableDisplay(); // Actualizar la tabla principal (esto es un placeholder, realmente necesitas recargar la tabla PHP o actualizar el conteo en el DOM)
                 } else {
                     showToast('danger', data.message);
                 }
@@ -481,12 +549,12 @@ try {
             .then(data => {
                 suggestedSubjectsListDiv.innerHTML = ''; // Limpiar el contenido anterior
                 if (data.success) {
-                    if (data.subjects && Array.isArray(data.subjects) && data.subjects.length > 0) { 
+                    if (data.subjects && Array.isArray(data.subjects) && data.subjects.length > 0) {
                         data.subjects.forEach(subject => {
                             const subjectName = (subject.nombre_asignatura !== null && typeof subject.nombre_asignatura !== 'undefined')
                                 ? String(subject.nombre_asignatura)
                                 : 'Nombre Desconocido'; // Valor por defecto si es nulo/indefinido
-                            const suggestedId = String(subject.id); 
+                            const suggestedId = String(subject.id);
 
                             const subjectItem = document.createElement('div');
                             subjectItem.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-center');
@@ -521,11 +589,11 @@ try {
             });
     }
 
-    // --- Asignar Asignatura vía AJAX ---
+    // --- Asignar Asignatura Sugerida vía AJAX ---
     document.getElementById('assignSubjectForm').addEventListener('submit', function (e) {
         e.preventDefault();
         const formData = new FormData(this);
-        const profesorId = document.getElementById('assign_profesor_id').value; // Usamos el profesor_id correcto
+        const profesorId = document.getElementById('assign_profesor_id_sugerida').value; // Usamos el profesor_id correcto
 
         fetch('../api/profesor.php', {
             method: 'POST',
@@ -540,15 +608,15 @@ try {
             .then(data => {
                 if (data.success) {
                     showToast('success', data.message);
-                    document.getElementById('availableSubjects').value = ''; // Limpiar select
+                    document.getElementById('availableSubjectsSugeridas').value = ''; // Limpiar select
                     loadSuggestedSubjects(profesorId); // Recargar sugerencias
                 } else {
                     showToast('danger', data.message);
                 }
             })
             .catch(error => {
-                console.error('Error al asignar asignatura:', error);
-                showToast('danger', 'Error de conexión al asignar asignatura.');
+                console.error('Error al asignar asignatura sugerida:', error);
+                showToast('danger', 'Error de conexión al asignar asignatura sugerida.');
             });
     });
 
@@ -582,7 +650,139 @@ try {
             });
     }
 
-    // --- Búsqueda dinámica ---
+    // --- NUEVA FUNCIONALIDAD: Cargar Asignaturas Asignadas vía AJAX ---
+    function loadAssignedSubjects(profesorId) {
+        const assignedSubjectsListDiv = document.getElementById('assignedSubjectsList');
+        assignedSubjectsListDiv.innerHTML = '<p class="text-center text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Cargando asignaturas asignadas...</p>';
+
+        fetch('../api/profesor.php?action=get_assigned_subjects&id_profesor=' + profesorId)
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        console.error('Respuesta de Error HTTP (texto):', text);
+                        throw new Error(`¡Error HTTP! Estado: ${response.status} - ${text.substring(0, 100)}...`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                assignedSubjectsListDiv.innerHTML = ''; // Limpiar el contenido anterior
+                if (data.success) {
+                    if (data.subjects && Array.isArray(data.subjects) && data.subjects.length > 0) {
+                        data.subjects.forEach(subject => {
+                            const subjectName = (subject.nombre_asignatura !== null && typeof subject.nombre_asignatura !== 'undefined')
+                                ? String(subject.nombre_asignatura)
+                                : 'Nombre Desconocido';
+                            const assignedId = String(subject.id); // Este es el ID de la tabla `profesores_asignaturas_asignadas`
+
+                            const subjectItem = document.createElement('div');
+                            subjectItem.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-center');
+                            subjectItem.innerHTML = `
+                                <span><i class="fas fa-check-circle me-2 text-success"></i> ${escapeHtml(subjectName)}</span>
+                                <div>
+                                    <button type="button" class="btn btn-danger btn-sm delete-assigned-subject-btn" data-id_asignacion="${escapeHtml(assignedId)}" title="Desasignar Asignatura"><i class="fas fa-minus-circle"></i></button>
+                                </div>
+                            `;
+                            assignedSubjectsListDiv.appendChild(subjectItem);
+                        });
+                        // Adjuntar event listeners a los nuevos botones de desasignar asignatura
+                        document.querySelectorAll('.delete-assigned-subject-btn').forEach(button => {
+                            button.addEventListener('click', function () {
+                                if (confirm('¿Estás seguro de que quieres desasignar esta asignatura?')) {
+                                    deleteAssignedSubject(this.dataset.id_asignacion, profesorId);
+                                }
+                            });
+                        });
+                    } else {
+                        assignedSubjectsListDiv.innerHTML = '<p class="text-center text-muted">No hay asignaturas asignadas oficialmente a este profesor.</p>';
+                    }
+                } else {
+                    assignedSubjectsListDiv.innerHTML = `<p class="text-center text-danger">Error al cargar asignaturas asignadas: ${escapeHtml(data.message)}</p>`;
+                    showToast('danger', `Error al cargar asignaturas asignadas: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error al cargar asignaturas asignadas (bloque catch):', error);
+                assignedSubjectsListDiv.innerHTML = '<p class="text-center text-danger">Error de conexión al cargar asignaturas asignadas.</p>';
+                showToast('danger', 'Error de conexión al cargar asignaturas asignadas.');
+            });
+    }
+
+    // --- NUEVA FUNCIONALIDAD: Asignar Asignatura Oficialmente vía AJAX ---
+    document.getElementById('assignOfficialSubjectForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const profesorId = document.getElementById('assign_profesor_id_oficial').value;
+
+        fetch('../api/profesor.php', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    showToast('success', data.message);
+                    document.getElementById('availableSubjectsOficiales').value = ''; // Limpiar select
+                    loadAssignedSubjects(profesorId); // Recargar asignaturas asignadas
+                    updateProfessorsTableDisplay(); // Actualizar el contador en la tabla principal
+                } else {
+                    showToast('danger', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error al asignar asignatura oficialmente:', error);
+                showToast('danger', 'Error de conexión al asignar asignatura oficialmente.');
+            });
+    });
+
+    // --- NUEVA FUNCIONALIDAD: Desasignar Asignatura Oficialmente vía AJAX ---
+    function deleteAssignedSubject(idAsignacion, profesorId) {
+        const formData = new FormData();
+        formData.append('action', 'delete_assigned_subject');
+        formData.append('id_asignacion', idAsignacion);
+
+        fetch('../api/profesor.php', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    showToast('success', data.message);
+                    loadAssignedSubjects(profesorId); // Recargar asignaturas asignadas
+                    updateProfessorsTableDisplay(); // Actualizar el contador en la tabla principal
+                } else {
+                    showToast('danger', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error al desasignar asignatura:', error);
+                showToast('danger', 'Error de conexión al desasignar asignatura.');
+            });
+    }
+
+    // --- Función para actualizar la tabla principal después de cambios (ej. conteo de CVs/asignaturas) ---
+    // Esta función recarga la página para reflejar los cambios en la tabla principal.
+    // En una aplicación más compleja, se podría actualizar solo la fila relevante con AJAX.
+    function updateProfessorsTableDisplay() {
+        // Simple recarga de la página para ver el conteo actualizado.
+        // Considera una actualización más granular para una mejor UX.
+        location.reload();
+    }
+
+    // --- Paginación y Búsqueda dinámica ---
+    // (Tu código existente para paginación y búsqueda iría aquí)
+    // Asegúrate de que tu función de búsqueda maneje la nueva columna si es necesario.
     document.getElementById('searchInput').addEventListener('keyup', function () {
         var input, filter, table, tr, td, i, txtValue;
         input = document.getElementById("searchInput");
@@ -590,95 +790,22 @@ try {
         table = document.getElementById("professorsTable");
         tr = table.getElementsByTagName("tr");
 
-        // Ocultar paginación al buscar
-        document.getElementById('pagination').style.display = 'none';
+        for (i = 1; i < tr.length; i++) { // Empieza en 1 para saltar el thead
+            // Obtén las celdas de Nombre Completo (índice 1) y Email (índice 3)
+            var tdNombre = tr[i].getElementsByTagName("td")[1];
+            var tdEmail = tr[i].getElementsByTagName("td")[3];
+            
+            if (tdNombre || tdEmail) {
+                var nombreTxt = tdNombre ? tdNombre.textContent || tdNombre.innerText : '';
+                var emailTxt = tdEmail ? tdEmail.textContent || tdEmail.innerText : '';
 
-        for (i = 1; i < tr.length; i++) { // Ignorar la fila de encabezado (index 0)
-            tr[i].style.display = "none";
-            td = tr[i].getElementsByTagName("td");
-            // Buscar en las columnas de nombre completo (index 1) y email (index 3)
-            if (td[1] || td[3]) {
-                txtValue = (td[1] ? td[1].textContent || td[1].innerText : '') + ' ' +
-                           (td[3] ? td[3].textContent || td[3].innerText : '');
-                if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                if (nombreTxt.toUpperCase().indexOf(filter) > -1 || emailTxt.toUpperCase().indexOf(filter) > -1) {
                     tr[i].style.display = "";
+                } else {
+                    tr[i].style.display = "none";
                 }
             }
         }
     });
 
-    // --- Función para actualizar solo los contadores de CVs y la tabla si es necesario ---
-    // Esta función recarga la tabla de profesores para reflejar los cambios en los contadores.
-    // Podría optimizarse para solo actualizar la celda específica, pero recargar es más simple para empezar.
-    function updateProfessorsTableDisplay() {
-        fetch('professors.php?action=get_professors_data_only') // Nueva acción para obtener solo los datos de la tabla
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.professors) {
-                    const tbody = document.querySelector('#professorsTable tbody');
-                    tbody.innerHTML = ''; // Limpiar la tabla actual
-
-                    if (data.professors.length > 0) {
-                        data.professors.forEach(profesor => {
-                            const row = document.createElement('tr');
-                            row.setAttribute('data-profesor_id', escapeHtml(profesor.profesor_id));
-                            row.innerHTML = `
-                                <td>${escapeHtml(profesor.profesor_id)}</td>
-                                <td>${escapeHtml(profesor.nombre_completo)}</td>
-                                <td>${escapeHtml(profesor.nombre_usuario)}</td>
-                                <td>${escapeHtml(profesor.email ?? 'N/A')}</td>
-                                <td>${escapeHtml(profesor.telefono ?? 'N/A')}</td>
-                                <td><span class="badge ${profesor.estado == 'Activo' ? 'bg-success' : (profesor.estado == 'Inactivo' ? 'bg-warning text-dark' : 'bg-danger')}">${escapeHtml(profesor.estado)}</span></td>
-                                <td>${escapeHtml(profesor.total_cvs)}</td>
-                                <td>
-                                    <button type="button" class="btn btn-info btn-sm view-details-btn me-1"
-                                            title="Ver Detalles y Gestionar" data-bs-toggle="modal"
-                                            data-bs-target="#professorDetailsModal"
-                                            data-profesor_id="${escapeHtml(profesor.profesor_id)}"
-                                            data-nombre_completo="${escapeHtml(profesor.nombre_completo)}">
-                                        <i class="fas fa-eye"></i> Detalles
-                                    </button>
-                                    <a href="users.php?action=edit&id=${escapeHtml(profesor.user_id)}"
-                                        class="btn btn-primary btn-sm me-1" title="Editar Perfil General de Usuario">
-                                        <i class="fas fa-user-edit"></i>
-                                    </a>
-                                    <a href="professors.php?action=delete&id=${escapeHtml(profesor.profesor_id)}"
-                                        class="btn btn-danger btn-sm delete-btn" title="Eliminar Profesor"
-                                        onclick="return confirm('¿Estás seguro de que quieres eliminar a este profesor y todos sus datos asociados (CVs, sugerencias)? Esta acción es irreversible y solo se permitirá si no tiene horarios asignados.');">
-                                        <i class="fas fa-trash"></i>
-                                    </a>
-                                </td>
-                            `;
-                            tbody.appendChild(row);
-                        });
-                        // Volver a adjuntar event listeners a los nuevos botones de 'Detalles'
-                        document.querySelectorAll('.view-details-btn').forEach(button => {
-                            button.addEventListener('click', function () {
-                                const profesorId = this.dataset.profesor_id;
-                                const profesorNombre = this.dataset.nombre_completo;
-                                document.getElementById('current_profesor_id').value = profesorId;
-                                document.getElementById('cv_profesor_id').value = profesorId;
-                                document.getElementById('assign_profesor_id').value = profesorId;
-                                document.getElementById('profNameDisplay').innerText = profesorNombre;
-                                loadProfessorCvs(profesorId);
-                                loadSuggestedSubjects(profesorId);
-                            });
-                        });
-                    } else {
-                        tbody.innerHTML = '<tr><td colspan="8" class="text-center">No hay profesores registrados.</td></tr>';
-                    }
-                } else {
-                    showToast('danger', data.message || 'Error al actualizar la tabla de profesores.');
-                }
-            })
-            .catch(error => {
-                console.error('Error al recargar la tabla de profesores:', error);
-                showToast('danger', 'Error de conexión al recargar la tabla de profesores.');
-            });
-    }
-
-    // --- Manejo de paginación (si tienes más de 10-20 registros, es bueno implementarlo) ---
-    // (Este es un placeholder, necesitarías una implementación real de paginación)
-    // Se oculta en la función de búsqueda. Cuando la búsqueda se limpia, deberías volver a mostrarla.
-    // Una implementación completa de paginación iría aquí, actualizando dinámicamente las páginas.
 </script>

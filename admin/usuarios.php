@@ -22,8 +22,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Campos específicos de Estudiante
     $codigo_registro = sanitize_input($_POST['codigo_registro'] ?? '');
-    $id_anio_inicio = filter_var($_POST['id_anio_inicio'] ?? null, FILTER_VALIDATE_INT);
-    $id_curso_inicio = filter_var($_POST['id_curso_inicio'] ?? null, FILTER_VALIDATE_INT);
+    // Eliminamos id_anio_inicio y id_curso_inicio directos de 'estudiantes' si la nueva tabla 'curso_estudiante' maneja esto.
+    // En su lugar, capturamos los nuevos campos para la relación curso_estudiante
+    $id_anio_inscripcion = filter_var($_POST['id_anio_inscripcion'] ?? null, FILTER_VALIDATE_INT);
+    $cursos_seleccionados = $_POST['cursos_seleccionados'] ?? []; // Array de IDs de cursos
 
     // NUEVOS Campos específicos de Profesor
     $especialidad = sanitize_input($_POST['especialidad'] ?? '');
@@ -49,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->beginTransaction();
 
                     $stmt = $pdo->prepare("INSERT INTO usuarios (nombre_usuario, password_hash, id_rol, nombre_completo, email, telefono, nip, estado)
-                                                VALUES (:nombre_usuario, :password_hash, :id_rol, :nombre_completo, :email, :telefono, :nip, :estado)");
+                                            VALUES (:nombre_usuario, :password_hash, :id_rol, :nombre_completo, :email, :telefono, :nip, :estado)");
                     $stmt->bindParam(':nombre_usuario', $nombre_usuario);
                     $stmt->bindParam(':password_hash', $password_hash);
                     $stmt->bindParam(':id_rol', $id_rol);
@@ -62,21 +64,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $new_user_id = $pdo->lastInsertId();
 
                     if ($nombre_rol_seleccionado === 'Estudiante') {
-                        if (empty($codigo_registro) || empty($id_anio_inicio) || empty($id_curso_inicio)) {
-                             set_flash_message('danger', 'Error: Para estudiantes, el Código de Registro, Año de Inicio y Curso de Inicio son obligatorios.');
+                        // Aquí, el código de registro es obligatorio para un estudiante.
+                        // La inscripción a cursos se maneja en curso_estudiante.
+                        if (empty($codigo_registro)) { // Quitamos la validación de id_anio_inicio e id_curso_inicio aquí
+                             set_flash_message('danger', 'Error: Para estudiantes, el Código de Registro es obligatorio.');
                              $pdo->rollBack();
                         } else {
-                            $stmt_estudiante = $pdo->prepare("INSERT INTO estudiantes (id_usuario, codigo_registro, id_anio_inicio, id_curso_inicio) VALUES (:id_usuario, :codigo_registro, :id_anio_inicio, :id_curso_inicio)");
+                            $stmt_estudiante = $pdo->prepare("INSERT INTO estudiantes (id_usuario, codigo_registro) VALUES (:id_usuario, :codigo_registro)");
                             $stmt_estudiante->bindParam(':id_usuario', $new_user_id);
                             $stmt_estudiante->bindParam(':codigo_registro', $codigo_registro);
-                            $stmt_estudiante->bindParam(':id_anio_inicio', $id_anio_inicio);
-                            $stmt_estudiante->bindParam(':id_curso_inicio', $id_curso_inicio);
                             $stmt_estudiante->execute();
+                            $id_estudiante_reciente = $pdo->lastInsertId(); // Obtener el ID del estudiante recién creado
+
+                            // Insertar en la tabla curso_estudiante
+                            if (!empty($cursos_seleccionados) && $id_anio_inscripcion) {
+                                $stmt_curso_estudiante = $pdo->prepare("INSERT INTO curso_estudiante (id_estudiante, id_curso, id_anio) VALUES (:id_estudiante, :id_curso, :id_anio)");
+                                foreach ($cursos_seleccionados as $curso_id) {
+                                    $stmt_curso_estudiante->bindParam(':id_estudiante', $id_estudiante_reciente);
+                                    $stmt_curso_estudiante->bindParam(':id_curso', $curso_id);
+                                    $stmt_curso_estudiante->bindParam(':id_anio', $id_anio_inscripcion);
+                                    $stmt_curso_estudiante->execute();
+                                }
+                            }
+
                             $pdo->commit();
                             set_flash_message('success', 'Usuario Estudiante añadido correctamente.');
                         }
-                    } elseif ($nombre_rol_seleccionado === 'Profesor') { // NUEVA LÓGICA PARA PROFESOR
-                        // Aquí no hacemos campos obligatorios por defecto, pero podrías añadirlos si lo necesitas
+                    } elseif ($nombre_rol_seleccionado === 'Profesor') { // LÓGICA PARA PROFESOR
                         $stmt_profesor = $pdo->prepare("INSERT INTO profesores (id_usuario, especialidad, grado_academico) VALUES (:id_usuario, :especialidad, :grado_academico)");
                         $stmt_profesor->bindParam(':id_usuario', $new_user_id);
                         $stmt_profesor->bindParam(':especialidad', $especialidad);
@@ -117,31 +131,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     // Lógica para ESTUDIANTES
                     if ($nombre_rol_seleccionado === 'Estudiante') {
-                         if (empty($codigo_registro) || empty($id_anio_inicio) || empty($id_curso_inicio)) {
-                             set_flash_message('danger', 'Error: Para estudiantes, el Código de Registro, Año de Inicio y Curso de Inicio son obligatorios.');
-                             $pdo->rollBack();
-                         } else {
-                            $stmt_check_est = $pdo->prepare("SELECT id FROM estudiantes WHERE id_usuario = :id_usuario");
-                            $stmt_check_est->bindParam(':id_usuario', $id);
-                            $stmt_check_est->execute();
-                            if ($stmt_check_est->fetch()) {
-                                $stmt_estudiante = $pdo->prepare("UPDATE estudiantes SET codigo_registro = :codigo_registro, id_anio_inicio = :id_anio_inicio, id_curso_inicio = :id_curso_inicio WHERE id_usuario = :id_usuario");
+                        if (empty($codigo_registro)) { // Solo validamos el código de registro aquí
+                            set_flash_message('danger', 'Error: Para estudiantes, el Código de Registro es obligatorio.');
+                            $pdo->rollBack();
+                        } else {
+                            // Obtener el ID del estudiante asociado al usuario
+                            $stmt_get_estudiante_id = $pdo->prepare("SELECT id FROM estudiantes WHERE id_usuario = :id_usuario");
+                            $stmt_get_estudiante_id->bindParam(':id_usuario', $id);
+                            $stmt_get_estudiante_id->execute();
+                            $current_estudiante_id = $stmt_get_estudiante_id->fetchColumn();
+
+                            if ($current_estudiante_id) {
+                                $stmt_estudiante = $pdo->prepare("UPDATE estudiantes SET codigo_registro = :codigo_registro WHERE id = :id_estudiante");
+                                $stmt_estudiante->bindParam(':codigo_registro', $codigo_registro);
+                                $stmt_estudiante->bindParam(':id_estudiante', $current_estudiante_id);
+                                $stmt_estudiante->execute();
                             } else {
-                                $stmt_estudiante = $pdo->prepare("INSERT INTO estudiantes (id_usuario, codigo_registro, id_anio_inicio, id_curso_inicio) VALUES (:id_usuario, :codigo_registro, :id_anio_inicio, :id_curso_inicio)");
+                                // Si no existe un registro de estudiante, crearlo
+                                $stmt_estudiante = $pdo->prepare("INSERT INTO estudiantes (id_usuario, codigo_registro) VALUES (:id_usuario, :codigo_registro)");
+                                $stmt_estudiante->bindParam(':id_usuario', $id);
+                                $stmt_estudiante->bindParam(':codigo_registro', $codigo_registro);
+                                $stmt_estudiante->execute();
+                                $current_estudiante_id = $pdo->lastInsertId();
                             }
-                            $stmt_estudiante->bindParam(':id_usuario', $id);
-                            $stmt_estudiante->bindParam(':codigo_registro', $codigo_registro);
-                            $stmt_estudiante->bindParam(':id_anio_inicio', $id_anio_inicio);
-                            $stmt_estudiante->bindParam(':id_curso_inicio', $id_curso_inicio);
-                            $stmt_estudiante->execute();
-                            // También elimina el registro de profesor si el usuario era antes un profesor
+
+                            // Eliminar todas las inscripciones de cursos existentes para este estudiante
+                            $stmt_delete_cursos_est = $pdo->prepare("DELETE FROM curso_estudiante WHERE id_estudiante = :id_estudiante");
+                            $stmt_delete_cursos_est->bindParam(':id_estudiante', $current_estudiante_id);
+                            $stmt_delete_cursos_est->execute();
+
+                            // Insertar nuevas inscripciones de cursos si se han seleccionado
+                            if (!empty($cursos_seleccionados) && $id_anio_inscripcion) {
+                                $stmt_insert_curso_est = $pdo->prepare("INSERT INTO curso_estudiante (id_estudiante, id_curso, id_anio) VALUES (:id_estudiante, :id_curso, :id_anio)");
+                                foreach ($cursos_seleccionados as $curso_id) {
+                                    $stmt_insert_curso_est->bindParam(':id_estudiante', $current_estudiante_id);
+                                    $stmt_insert_curso_est->bindParam(':id_curso', $curso_id);
+                                    $stmt_insert_curso_est->bindParam(':id_anio', $id_anio_inscripcion);
+                                    $stmt_insert_curso_est->execute();
+                                }
+                            }
+
+                            // Elimina el registro de profesor si el usuario era antes un profesor y ahora es estudiante
                             $stmt_delete_prof = $pdo->prepare("DELETE FROM profesores WHERE id_usuario = :id_usuario");
                             $stmt_delete_prof->bindParam(':id_usuario', $id);
                             $stmt_delete_prof->execute();
                             $pdo->commit();
                             set_flash_message('success', 'Usuario Estudiante actualizado correctamente.');
                         }
-                    } elseif ($nombre_rol_seleccionado === 'Profesor') { // NUEVA LÓGICA PARA PROFESORES
+                    } elseif ($nombre_rol_seleccionado === 'Profesor') { // LÓGICA PARA PROFESORES
                         $stmt_check_prof = $pdo->prepare("SELECT id FROM profesores WHERE id_usuario = :id_usuario");
                         $stmt_check_prof->bindParam(':id_usuario', $id);
                         $stmt_check_prof->execute();
@@ -158,6 +195,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $stmt_delete_est = $pdo->prepare("DELETE FROM estudiantes WHERE id_usuario = :id_usuario");
                         $stmt_delete_est->bindParam(':id_usuario', $id);
                         $stmt_delete_est->execute();
+                        // Y elimina sus cursos asociados en curso_estudiante
+                        $stmt_get_estudiante_id_to_delete = $pdo->prepare("SELECT id FROM estudiantes WHERE id_usuario = :id_usuario");
+                        $stmt_get_estudiante_id_to_delete->bindParam(':id_usuario', $id);
+                        $estudiante_id_to_delete = $stmt_get_estudiante_id_to_delete->fetchColumn();
+                        if ($estudiante_id_to_delete) {
+                            $stmt_delete_cursos_est = $pdo->prepare("DELETE FROM curso_estudiante WHERE id_estudiante = :id_estudiante");
+                            $stmt_delete_cursos_est->bindParam(':id_estudiante', $estudiante_id_to_delete);
+                            $stmt_delete_cursos_est->execute();
+                        }
+
                         $pdo->commit();
                         set_flash_message('success', 'Usuario Profesor actualizado correctamente.');
                     } else {
@@ -165,6 +212,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $stmt_delete_est = $pdo->prepare("DELETE FROM estudiantes WHERE id_usuario = :id_usuario");
                         $stmt_delete_est->bindParam(':id_usuario', $id);
                         $stmt_delete_est->execute();
+
+                        // También elimina sus cursos asociados en curso_estudiante
+                        $stmt_get_estudiante_id_to_delete = $pdo->prepare("SELECT id FROM estudiantes WHERE id_usuario = :id_usuario");
+                        $stmt_get_estudiante_id_to_delete->bindParam(':id_usuario', $id);
+                        $estudiante_id_to_delete = $stmt_get_estudiante_id_to_delete->fetchColumn();
+                        if ($estudiante_id_to_delete) {
+                            $stmt_delete_cursos_est = $pdo->prepare("DELETE FROM curso_estudiante WHERE id_estudiante = :id_estudiante");
+                            $stmt_delete_cursos_est->bindParam(':id_estudiante', $estudiante_id_to_delete);
+                            $stmt_delete_cursos_est->execute();
+                        }
 
                         $stmt_delete_prof = $pdo->prepare("DELETE FROM profesores WHERE id_usuario = :id_usuario");
                         $stmt_delete_prof->bindParam(':id_usuario', $id);
@@ -179,12 +236,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     set_flash_message('danger', 'Error: ID de usuario no válido para eliminación.');
                 } else {
                     $pdo->beginTransaction();
-                    // Eliminar de tablas relacionadas primero debido a claves foráneas
+
+                    // Obtener el ID del estudiante para eliminar sus cursos asociados
+                    $stmt_get_estudiante_id_to_delete = $pdo->prepare("SELECT id FROM estudiantes WHERE id_usuario = :id_usuario");
+                    $stmt_get_estudiante_id_to_delete->bindParam(':id_usuario', $id);
+                    $estudiante_id_to_delete = $stmt_get_estudiante_id_to_delete->fetchColumn();
+
+                    // Eliminar de curso_estudiante si el usuario es un estudiante
+                    if ($estudiante_id_to_delete) {
+                        $stmt_delete_cursos_est = $pdo->prepare("DELETE FROM curso_estudiante WHERE id_estudiante = :id_estudiante");
+                        $stmt_delete_cursos_est->bindParam(':id_estudiante', $estudiante_id_to_delete);
+                        $stmt_delete_cursos_est->execute();
+                    }
+
+                    // Eliminar de tablas relacionadas (estudiantes, profesores) primero debido a claves foráneas
                     $stmt_delete_est = $pdo->prepare("DELETE FROM estudiantes WHERE id_usuario = :id");
                     $stmt_delete_est->bindParam(':id', $id);
                     $stmt_delete_est->execute();
 
-                    // NUEVA LÓGICA: Eliminar de profesores si existe
                     $stmt_delete_prof = $pdo->prepare("DELETE FROM profesores WHERE id_usuario = :id");
                     $stmt_delete_prof->bindParam(':id', $id);
                     $stmt_delete_prof->execute();
@@ -211,37 +280,66 @@ $roles = $stmt_roles->fetchAll();
 $stmt_anios = $pdo->query("SELECT id, nombre_anio FROM anios_academicos ORDER BY nombre_anio DESC");
 $anios_academicos = $stmt_anios->fetchAll();
 
-$stmt_cursos = $pdo->query("SELECT id, nombre_curso FROM cursos ORDER BY nombre_curso ASC");
-$cursos = $stmt_cursos->fetchAll();
+$stmt_cursos_all = $pdo->query("SELECT id, nombre_curso FROM cursos ORDER BY nombre_curso ASC");
+$cursos_all = $stmt_cursos_all->fetchAll();
 
 // --- Obtener todos los usuarios para la tabla ---
+// Modificamos la consulta para recuperar los cursos del estudiante
 $stmt_usuarios = $pdo->query("
     SELECT u.id, u.nombre_usuario, u.nombre_completo, u.email, u.telefono, u.nip, u.estado,
-           r.id AS id_rol, r.nombre_rol, -- Aseguramos que el id_rol se recupere correctamente
-           e.codigo_registro,
-           e.id_anio_inicio, -- Recuperar el ID del año para el select
-           (SELECT nombre_anio FROM anios_academicos WHERE id = e.id_anio_inicio) AS anio_inicio_nombre,
-           e.id_curso_inicio, -- Recuperar el ID del curso para el select
-           (SELECT nombre_curso FROM cursos WHERE id = e.id_curso_inicio) AS curso_inicio_nombre,
-           p.especialidad,   -- NUEVO: Campo de profesores
-           p.grado_academico -- NUEVO: Campo de profesores
+           r.id AS id_rol, r.nombre_rol,
+           e.id AS estudiante_id, e.codigo_registro,
+           p.especialidad,
+           p.grado_academico
     FROM usuarios u
     JOIN roles r ON u.id_rol = r.id
     LEFT JOIN estudiantes e ON u.id = e.id_usuario
-    LEFT JOIN profesores p ON u.id = p.id_usuario -- NUEVO: Unir con la tabla profesores
+    LEFT JOIN profesores p ON u.id = p.id_usuario
     ORDER BY u.id DESC
 ");
-$usuarios = $stmt_usuarios->fetchAll();
+$usuarios = $stmt_usuarios->fetchAll(PDO::FETCH_ASSOC);
+
+// Para cada estudiante, obtener sus cursos asociados
+foreach ($usuarios as &$user) {
+    if ($user['nombre_rol'] === 'Estudiante' && $user['estudiante_id']) {
+        $stmt_cursos_estudiante = $pdo->prepare("
+            SELECT ce.id_curso, c.nombre_curso, ce.id_anio, a.nombre_anio
+            FROM curso_estudiante ce
+            JOIN cursos c ON ce.id_curso = c.id
+            JOIN anios_academicos a ON ce.id_anio = a.id
+            WHERE ce.id_estudiante = :estudiante_id
+        ");
+        $stmt_cursos_estudiante->bindParam(':estudiante_id', $user['estudiante_id']);
+        $stmt_cursos_estudiante->execute();
+        $user['cursos_inscritos'] = $stmt_cursos_estudiante->fetchAll(PDO::FETCH_ASSOC);
+
+        // Para mostrar un resumen en la tabla principal (puedes ajustar esto)
+        $user['cursos_nombres_display'] = [];
+        $user['anios_inscripcion_display'] = [];
+        foreach ($user['cursos_inscritos'] as $curso_inscrito) {
+            $user['cursos_nombres_display'][] = $curso_inscrito['nombre_curso'];
+            // Asumo que el "año de inicio" para la visualización es el año de inscripción del curso
+            if (!in_array($curso_inscrito['nombre_anio'], $user['anios_inscripcion_display'])) {
+                $user['anios_inscripcion_display'][] = $curso_inscrito['nombre_anio'];
+            }
+        }
+        $user['cursos_nombres_display'] = implode(', ', $user['cursos_nombres_display']);
+        $user['anios_inscripcion_display'] = implode(', ', $user['anios_inscripcion_display']);
+
+    } else {
+        $user['cursos_inscritos'] = [];
+        $user['cursos_nombres_display'] = '-';
+        $user['anios_inscripcion_display'] = '-';
+    }
+}
+unset($user); // Romper la referencia al último elemento
 
 // NEW: Obtener mensajes flash para JavaScript
 $flash_messages = get_flash_messages();
-
 ?>
 
 <h1 class="mt-4">Gestión de Usuarios</h1>
 <p class="lead">Administra los usuarios (Administradores, Estudiantes, Profesores) del sistema.</p>
-
-<?php // echo $message; // <-- ¡ELIMINA ESTA LÍNEA! Los mensajes se mostrarán con JS ahora ?>
 
 <div class="mb-3 d-flex justify-content-between align-items-center">
     <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#userModal" id="addUserBtn">
@@ -269,9 +367,9 @@ $flash_messages = get_flash_messages();
                         <th>Email</th>
                         <th>Teléfono</th>
                         <th>Cód. Registro</th>
-                        <th>Año Inicio</th>
-                        <th>Curso Inicio</th>
-                        <th>Especialidad</th> <th>Grado Académico</th> <th>Estado</th>
+                        <th>Cursos Inscritos</th> <th>Años de Inscripción</th> <th>Especialidad</th>
+                        <th>Grado Académico</th>
+                        <th>Estado</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -286,8 +384,8 @@ $flash_messages = get_flash_messages();
                                 data-nip="<?php echo htmlspecialchars($user['nip']); ?>"
                                 data-id_rol="<?php echo htmlspecialchars($user['id_rol']); ?>" data-nombre_rol="<?php echo htmlspecialchars($user['nombre_rol']); ?>"
                                 data-codigo_registro="<?php echo htmlspecialchars($user['codigo_registro'] ?? ''); ?>"
-                                data-id_anio_inicio="<?php echo htmlspecialchars($user['id_anio_inicio'] ?? ''); ?>"
-                                data-id_curso_inicio="<?php echo htmlspecialchars($user['id_curso_inicio'] ?? ''); ?>"
+                                data-estudiante_id="<?php echo htmlspecialchars($user['estudiante_id'] ?? ''); ?>"
+                                data-cursos_inscritos_json='<?php echo json_encode($user['cursos_inscritos']); ?>'
                                 data-especialidad="<?php echo htmlspecialchars($user['especialidad'] ?? ''); ?>" data-grado_academico="<?php echo htmlspecialchars($user['grado_academico'] ?? ''); ?>" data-estado="<?php echo htmlspecialchars($user['estado']); ?>">
                                 <td><?php echo htmlspecialchars($user['id']); ?></td>
                                 <td><?php echo htmlspecialchars($user['nip']); ?></td>
@@ -297,9 +395,9 @@ $flash_messages = get_flash_messages();
                                 <td><?php echo htmlspecialchars($user['email']); ?></td>
                                 <td><?php echo htmlspecialchars($user['telefono']); ?></td>
                                 <td><?php echo htmlspecialchars($user['nombre_rol'] === 'Estudiante' ? ($user['codigo_registro'] ?? '-') : '-'); ?></td>
-                                <td><?php echo htmlspecialchars($user['nombre_rol'] === 'Estudiante' ? ($user['anio_inicio_nombre'] ?? '-') : '-'); ?></td>
-                                <td><?php echo htmlspecialchars($user['nombre_rol'] === 'Estudiante' ? ($user['curso_inicio_nombre'] ?? '-') : '-'); ?></td>
-                                <td><?php echo htmlspecialchars($user['nombre_rol'] === 'Profesor' ? ($user['especialidad'] ?? '-') : '-'); ?></td> <td><?php echo htmlspecialchars($user['nombre_rol'] === 'Profesor' ? ($user['grado_academico'] ?? '-') : '-'); ?></td> <td>
+                                <td><?php echo htmlspecialchars($user['cursos_nombres_display']); ?></td> <td><?php echo htmlspecialchars($user['anios_inscripcion_display']); ?></td> <td><?php echo htmlspecialchars($user['nombre_rol'] === 'Profesor' ? ($user['especialidad'] ?? '-') : '-'); ?></td>
+                                <td><?php echo htmlspecialchars($user['nombre_rol'] === 'Profesor' ? ($user['grado_academico'] ?? '-') : '-'); ?></td>
+                                <td>
                                     <?php
                                         $estado_clase = '';
                                         switch ($user['estado']) {
@@ -327,7 +425,8 @@ $flash_messages = get_flash_messages();
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="14" class="text-center">No hay usuarios registrados.</td> </tr>
+                            <td colspan="14" class="text-center">No hay usuarios registrados.</td>
+                        </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -391,7 +490,7 @@ $flash_messages = get_flash_messages();
                             <select class="form-select" id="id_rol" name="id_rol" required onchange="toggleRoleSpecificFields()">
                                 <option value="">Selecciona un rol</option>
                                 <?php foreach ($roles as $rol): ?>
-                                    <option value="<?php echo htmlspecialchars($rol['id']); ?>">
+                                    <option value="<?php echo htmlspecialchars($rol['id']); ?>" data-role-name="<?php echo htmlspecialchars($rol['nombre_rol']); ?>">
                                         <?php echo htmlspecialchars($rol['nombre_rol']); ?>
                                     </option>
                                 <?php endforeach; ?>
@@ -411,13 +510,13 @@ $flash_messages = get_flash_messages();
                         <hr>
                         <h6 class="mb-3 text-primary">Detalles de Estudiante</h6>
                         <div class="row mb-3">
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <label for="codigo_registro" class="form-label">Código de Registro <span class="text-danger student-required-label">*</span></label>
                                 <input type="text" class="form-control" id="codigo_registro" name="codigo_registro">
                             </div>
-                            <div class="col-md-4">
-                                <label for="id_anio_inicio" class="form-label">Año de Inicio <span class="text-danger student-required-label">*</span></label>
-                                <select class="form-select" id="id_anio_inicio" name="id_anio_inicio">
+                             <div class="col-md-6">
+                                <label for="id_anio_inscripcion" class="form-label">Año Académico de Inscripción <span class="text-danger student-required-label">*</span></label>
+                                <select class="form-select" id="id_anio_inscripcion" name="id_anio_inscripcion">
                                     <option value="">Selecciona un año</option>
                                     <?php foreach ($anios_academicos as $anio): ?>
                                         <option value="<?php echo htmlspecialchars($anio['id']); ?>">
@@ -426,16 +525,18 @@ $flash_messages = get_flash_messages();
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <div class="col-md-4">
-                                <label for="id_curso_inicio" class="form-label">Curso de Inicio <span class="text-danger student-required-label">*</span></label>
-                                <select class="form-select" id="id_curso_inicio" name="id_curso_inicio">
-                                    <option value="">Selecciona un curso</option>
-                                    <?php foreach ($cursos as $curso): ?>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="cursos_seleccionados" class="form-label">Cursos a Inscribir <span class="text-danger student-required-label">*</span></label>
+                                <select class="form-select" id="cursos_seleccionados" name="cursos_seleccionados[]" multiple size="5">
+                                    <?php foreach ($cursos_all as $curso): ?>
                                         <option value="<?php echo htmlspecialchars($curso['id']); ?>">
                                             <?php echo htmlspecialchars($curso['nombre_curso']); ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                                <small class="form-text text-muted">Mantén 'Ctrl' (Windows/Linux) o 'Cmd' (Mac) para seleccionar múltiples cursos.</small>
                             </div>
                         </div>
                     </div>
@@ -479,9 +580,11 @@ $flash_messages = get_flash_messages();
 
     // Obtener el mapeo de ID de rol a nombre de rol desde PHP
     const roleNames = {};
-    <?php foreach ($roles as $rol): ?>
-        roleNames[<?php echo htmlspecialchars($rol['id']); ?>] = '<?php echo htmlspecialchars($rol['nombre_rol']); ?>';
-    <?php endforeach; ?>
+    document.querySelectorAll('#id_rol option').forEach(option => {
+        if (option.value) { // Ignorar la opción vacía
+            roleNames[option.value] = option.dataset.roleName;
+        }
+    });
 
     // Función para mostrar/ocultar campos específicos de cada rol
     function toggleRoleSpecificFields() {
@@ -491,213 +594,163 @@ $flash_messages = get_flash_messages();
         var studentFields = document.getElementById('student-fields');
         var studentRequiredInputs = studentFields.querySelectorAll('input, select');
         var professorFields = document.getElementById('professor-fields');
-        var professorInputs = professorFields.querySelectorAll('input, select'); // Los campos de profesor no son obligatorios por defecto
+        var professorInputs = professorFields.querySelectorAll('input, select');
 
-        // Ocultar todos los campos específicos primero
+        // Ocultar todos los campos específicos primero y remover 'required'
         studentFields.style.display = 'none';
         studentRequiredInputs.forEach(function(input) {
             input.removeAttribute('required');
-            input.value = ''; // Limpiar campos al ocultar
+            if (input.tagName === 'SELECT' && input.multiple) {
+                // Deseleccionar todas las opciones para selects múltiples
+                Array.from(input.options).forEach(option => option.selected = false);
+            } else {
+                input.value = ''; // Limpiar campos al ocultar
+            }
         });
 
         professorFields.style.display = 'none';
         professorInputs.forEach(function(input) {
-            // input.removeAttribute('required'); // Los de profesor no suelen ser required
+            input.removeAttribute('required'); // Los campos de profesor no son obligatorios por defecto
             input.value = ''; // Limpiar campos al ocultar
         });
 
-
+        // Aplicar 'required' y mostrar campos según el rol seleccionado
         if (selectedRoleName === 'Estudiante') {
             studentFields.style.display = 'block';
-            studentRequiredInputs.forEach(function(input) {
-                input.setAttribute('required', 'required');
-            });
+            document.getElementById('codigo_registro').setAttribute('required', 'required');
+            document.getElementById('id_anio_inscripcion').setAttribute('required', 'required');
+            document.getElementById('cursos_seleccionados').setAttribute('required', 'required'); // Hacer el select múltiple requerido
         } else if (selectedRoleName === 'Profesor') {
             professorFields.style.display = 'block';
             // Los campos de profesor no son requeridos por defecto, así que no se añaden 'required'
         }
     }
 
-
     // Lógica para abrir modal de "Añadir Nuevo Usuario"
     document.getElementById('addUserBtn').addEventListener('click', function() {
-        document.getElementById('userModalLabel').innerText = 'Añadir Nuevo Usuario';
+        document.getElementById('userForm').reset();
+        document.getElementById('userModalLabel').textContent = 'Añadir Nuevo Usuario';
         document.getElementById('formAction').value = 'add';
-        document.getElementById('userId').value = '';
-        document.getElementById('userForm').reset(); // Limpia el formulario
-        document.getElementById('password').setAttribute('required', 'required'); // Contraseña es requerida para añadir
+        document.getElementById('submitBtn').textContent = 'Añadir Usuario';
+        document.getElementById('password').setAttribute('required', 'required');
         document.getElementById('passwordRequired').style.display = 'inline';
-        document.getElementById('passwordHelp').innerText = 'Introduce una contraseña.';
-        document.getElementById('submitBtn').innerText = 'Añadir Usuario';
-        document.getElementById('estado').value = 'Activo'; // Default para añadir
-        toggleRoleSpecificFields(); // Asegura que los campos específicos estén ocultos por defecto
+        document.getElementById('passwordHelp').style.display = 'inline';
+        toggleRoleSpecificFields(); // Asegúrate de que los campos específicos estén ocultos al añadir
     });
 
     // Lógica para abrir modal de "Editar Usuario"
-    document.querySelectorAll('.edit-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            document.getElementById('userModalLabel').innerText = 'Editar Usuario';
-            document.getElementById('formAction').value = 'edit';
-            document.getElementById('password').removeAttribute('required'); // Contraseña no es requerida para editar
-            document.getElementById('passwordRequired').style.display = 'none';
-            document.getElementById('passwordHelp').innerText = 'Deja este campo vacío para mantener la contraseña actual.';
-            document.getElementById('submitBtn').innerText = 'Guardar Cambios';
-
-            const row = this.closest('tr');
-            document.getElementById('userId').value = row.dataset.id;
-            document.getElementById('nombre_usuario').value = row.dataset.nombre_usuario;
-            document.getElementById('nip').value = row.dataset.nip;
-            document.getElementById('nombre_completo').value = row.dataset.nombre_completo;
-            document.getElementById('email').value = row.dataset.email;
-            document.getElementById('telefono').value = row.dataset.telefono;
-            document.getElementById('id_rol').value = row.dataset.id_rol; // Asegúrate de que este es el ID del rol
-            document.getElementById('estado').value = row.dataset.estado;
-
-            // Campos específicos de estudiante
-            document.getElementById('codigo_registro').value = row.dataset.codigo_registro;
-            document.getElementById('id_anio_inicio').value = row.dataset.id_anio_inicio;
-            document.getElementById('id_curso_inicio').value = row.dataset.id_curso_inicio;
-
-            // NUEVO: Campos específicos de profesor
-            document.getElementById('especialidad').value = row.dataset.especialidad;
-            document.getElementById('grado_academico').value = row.dataset.grado_academico;
-
-            toggleRoleSpecificFields(); // Ajusta visibilidad y requeridos de campos según el rol
-        });
-    });
-
-    // --- Búsqueda dinámica ---
-    document.getElementById('searchInput').addEventListener('keyup', function() {
-        var input, filter, table, tr, td, i, j, txtValue;
-        input = document.getElementById("searchInput");
-        filter = input.value.toUpperCase();
-        table = document.getElementById("usuariosTable");
-        tr = table.getElementsByTagName("tr");
-
-        document.getElementById('pagination').style.display = 'none'; // Ocultar paginación durante la búsqueda
-
-        for (i = 1; i < tr.length; i++) { // Empieza en 1 para saltar el thead
-            tr[i].style.display = "none"; // Oculta todas las filas por defecto
-            td = tr[i].getElementsByTagName("td");
-            for (j = 0; j < td.length; j++) {
-                if (td[j]) {
-                    txtValue = td[j].textContent || td[j].innerText;
-                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                        tr[i].style.display = ""; // Muestra la fila si hay coincidencia
-                        break;
-                    }
-                }
-            }
-        }
-        if (filter === "") {
-            document.getElementById('pagination').style.display = 'flex';
-            showPage(currentPage); // Vuelve a mostrar la paginación al borrar el filtro
-        }
-    });
-
-    // --- Paginación ---
-    const rowsPerPage = 10;
-    let currentPage = 1;
-    let totalPages = 0;
-
-    function setupPagination() {
-        const table = document.getElementById('usuariosTable');
-        const tbodyRows = table.querySelectorAll('tbody tr');
-        totalPages = Math.ceil(tbodyRows.length / rowsPerPage);
-
-        const paginationUl = document.getElementById('pagination');
-        paginationUl.innerHTML = '';
-
-        if (tbodyRows.length <= rowsPerPage && document.getElementById('searchInput').value === "") { // Solo ocultar si no hay búsqueda
-             paginationUl.style.display = 'none';
-             tbodyRows.forEach(row => row.style.display = ''); // Mostrar todas las filas si no hay paginación y búsqueda
-             return;
-        } else {
-             paginationUl.style.display = 'flex';
-        }
-
-
-        // Botón "Anterior"
-        let prevLi = document.createElement('li');
-        prevLi.classList.add('page-item');
-        if (currentPage === 1) prevLi.classList.add('disabled');
-        prevLi.innerHTML = `<a class="page-link" href="#" aria-label="Previous"><span aria-hidden="true">&laquo;</span></a>`;
-        prevLi.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (currentPage > 1) {
-                currentPage--;
-                showPage(currentPage);
-                setupPagination();
-            }
-        });
-        paginationUl.appendChild(prevLi);
-
-        // Números de página
-        for (let i = 1; i <= totalPages; i++) {
-            let li = document.createElement('li');
-            li.classList.add('page-item');
-            if (i === currentPage) li.classList.add('active');
-            li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
-            li.addEventListener('click', (e) => {
-                e.preventDefault();
-                currentPage = i;
-                showPage(currentPage);
-                setupPagination();
-            });
-            paginationUl.appendChild(li);
-        }
-
-        // Botón "Siguiente"
-        let nextLi = document.createElement('li');
-        nextLi.classList.add('page-item');
-        if (currentPage === totalPages) nextLi.classList.add('disabled');
-        nextLi.innerHTML = `<a class="page-link" href="#" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>`;
-        nextLi.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (currentPage < totalPages) {
-                currentPage++;
-                showPage(currentPage);
-                setupPagination();
-            }
-        });
-        paginationUl.appendChild(nextLi);
-    }
-
-    function showPage(page) {
-        const table = document.getElementById('usuariosTable');
-        const tbodyRows = table.querySelectorAll('tbody tr');
-        const start = (page - 1) * rowsPerPage;
-        const end = start + rowsPerPage;
-
-        tbodyRows.forEach((row, index) => {
-            if (index >= start && index < end) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
-    }
-
-    // Ejecutar al cargar la página
     document.addEventListener('DOMContentLoaded', function() {
-        showPage(currentPage);
-        setupPagination();
-        toggleRoleSpecificFields(); // Asegurar que los campos correctos estén visibles/ocultos al cargar la página
+        document.getElementById('usuariosTable').addEventListener('click', function(event) {
+            const editBtn = event.target.closest('.edit-btn');
+            if (editBtn) {
+                const row = editBtn.closest('tr');
+                const id = row.dataset.id;
+                const nombre_usuario = row.dataset.nombre_usuario;
+                const nombre_completo = row.dataset.nombre_completo;
+                const email = row.dataset.email;
+                const telefono = row.dataset.telefono;
+                const nip = row.dataset.nip;
+                const id_rol = row.dataset.id_rol;
+                const nombre_rol = row.dataset.nombre_rol;
+                const estado = row.dataset.estado;
+                const codigo_registro = row.dataset.codigo_registro;
+                const especialidad = row.dataset.especialidad;
+                const grado_academico = row.dataset.grado_academico;
+                const cursos_inscritos_json = row.dataset.cursos_inscritos_json;
+                let cursos_inscritos = [];
+                try {
+                    cursos_inscritos = JSON.parse(cursos_inscritos_json);
+                } catch (e) {
+                    console.error('Error parsing cursos_inscritos_json:', e);
+                }
+
+                document.getElementById('userModalLabel').textContent = 'Editar Usuario';
+                document.getElementById('formAction').value = 'edit';
+                document.getElementById('submitBtn').textContent = 'Actualizar Usuario';
+                document.getElementById('password').removeAttribute('required');
+                document.getElementById('password').value = ''; // Limpiar la contraseña al editar
+                document.getElementById('passwordRequired').style.display = 'none';
+                document.getElementById('passwordHelp').style.display = 'inline';
+
+                document.getElementById('userId').value = id;
+                document.getElementById('nombre_usuario').value = nombre_usuario;
+                document.getElementById('nombre_completo').value = nombre_completo;
+                document.getElementById('email').value = email;
+                document.getElementById('telefono').value = telefono;
+                document.getElementById('nip').value = nip;
+                document.getElementById('id_rol').value = id_rol;
+                document.getElementById('estado').value = estado;
+
+                // Restablecer y luego establecer campos específicos de rol
+                toggleRoleSpecificFields(); // Oculta/limpia todos primero
+
+                if (nombre_rol === 'Estudiante') {
+                    document.getElementById('codigo_registro').value = codigo_registro;
+                    // Pre-seleccionar el año de inscripción del primer curso (o el que se considere principal)
+                    if (cursos_inscritos.length > 0 && cursos_inscritos[0].id_anio) {
+                         document.getElementById('id_anio_inscripcion').value = cursos_inscritos[0].id_anio;
+                    } else {
+                        document.getElementById('id_anio_inscripcion').value = ''; // Ningún año si no hay cursos
+                    }
+
+                    // Pre-seleccionar múltiples cursos
+                    const cursosSelect = document.getElementById('cursos_seleccionados');
+                    Array.from(cursosSelect.options).forEach(option => {
+                        option.selected = cursos_inscritos.some(ci => String(ci.id_curso) === option.value);
+                    });
+
+                } else if (nombre_rol === 'Profesor') {
+                    document.getElementById('especialidad').value = especialidad;
+                    document.getElementById('grado_academico').value = grado_academico;
+                }
+
+                // Asegurarse de que los campos específicos se muestren después de cargar los datos
+                toggleRoleSpecificFields();
+            }
+        });
 
         // Mostrar mensajes flash al cargar la página
         flashMessages.forEach(msg => {
-            showToast(msg.type, msg.message);
+            showToast(msg.message, msg.type);
         });
 
-        // Event listener para el cierre del modal para recargar la página si se realizó una acción exitosa
-        var userModalElement = document.getElementById('userModal');
-        userModalElement.addEventListener('hidden.bs.modal', function (event) {
-            // Comprobar si hay mensajes de éxito. Si los hay, significa que se realizó una acción y es buena idea recargar.
-            const hasSuccessMessage = flashMessages.some(msg => msg.type === 'success');
-            if (hasSuccessMessage) {
-                 window.location.reload(); // Recargar la página para ver los cambios
-            }
+        // Initial call to hide/show fields based on default role selection (if any)
+        toggleRoleSpecificFields();
+
+        // Search functionality
+        const searchInput = document.getElementById('searchInput');
+        searchInput.addEventListener('keyup', function() {
+            const filter = searchInput.value.toLowerCase();
+            const rows = document.querySelectorAll('#usuariosTable tbody tr');
+            rows.forEach(row => {
+                let textContent = row.textContent || row.innerText;
+                if (textContent.toLowerCase().indexOf(filter) > -1) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
         });
     });
 
+    // Toast functionality (assuming you have Bootstrap toasts)
+    function showToast(message, type) {
+        const toastContainer = document.querySelector('.toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast align-items-center text-white bg-${type} border-0`;
+        toast.setAttribute('role', 'alert');
+        toast.setAttribute('aria-live', 'assertive');
+        toast.setAttribute('aria-atomic', 'true');
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        `;
+        toastContainer.appendChild(toast);
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+    }
 </script>

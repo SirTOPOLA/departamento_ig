@@ -79,6 +79,38 @@ function get_flash_messages() {
     return $messages;
 }
  
+
+function get_current_academic_year($pdo) {
+    try {
+        $stmt = $pdo->prepare("SELECT id, nombre_anio, fecha_inicio, fecha_fin FROM anios_academicos WHERE CURDATE() BETWEEN fecha_inicio AND fecha_fin LIMIT 1");
+        $stmt->execute();
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        // En un entorno de producción, es mejor registrar el error en lugar de mostrarlo directamente.
+        error_log("Error al obtener el año académico actual: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Obtiene los detalles del semestre actual dentro de un año académico específico.
+ *
+ * @param PDO $pdo Objeto PDO de conexión a la base de datos.
+ * @param int $id_anio_academico_param El ID del año académico actual.
+ * @return array|false Retorna un array asociativo con los detalles del semestre actual (id, numero_semestre, nombre_semestre, fecha_inicio, fecha_fin) o false si no se encuentra ninguno.
+ */
+function get_current_semester_details(PDO $pdo, int $id_anio_academico_param) {
+    try {
+        $stmt = $pdo->prepare("SELECT id, numero_semestre, nombre_semestre, fecha_inicio, fecha_fin FROM semestres WHERE id_anio_academico = :id_anio_academico AND CURDATE() BETWEEN fecha_inicio AND fecha_fin LIMIT 1");
+        $stmt->bindParam(':id_anio_academico', $id_anio_academico_param, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al obtener los detalles del semestre actual: " . $e->getMessage());
+        return false;
+    }
+}
+
  
 // ... otras funciones
 

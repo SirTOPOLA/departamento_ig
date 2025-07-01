@@ -82,7 +82,7 @@
 <a href="../estudiantes/inscripciones.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'inscripciones.php') ? 'active' : ''; ?>">
     <i class="fas fa-user-check me-2"></i> Inscripción
 </a>
-<a href="../estudiantes/horario_academico.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'horario_academico.php') ? 'active' : ''; ?>">
+<a href="../estudiantes/historial_academico.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'historial_academico.php') ? 'active' : ''; ?>">
     <i class="fas fa-history me-2"></i> Historial Académico
 </a>
 <a href="../estudiantes/asignaturas.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'asignaturas.php') ? 'active' : ''; ?>">

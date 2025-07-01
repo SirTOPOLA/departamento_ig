@@ -15,8 +15,7 @@ require_once '../config/database.php';
 // 3. Lógica de autenticación y roles
 check_login_and_role('Administrador');
 
-// --- Lógica para añadir/editar/eliminar semestres (TU CÓDIGO POST) ---
-// Todo este bloque de lógica de formulario debe ir ANTES de cualquier HTML
+// --- Lógica para añadir/editar/eliminar semestres (TU CÓDIGO POST) --- 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 

@@ -11,122 +11,153 @@ check_login_and_role('Estudiante');
 
 require_once '../config/database.php';
 
-$page_title = "Mi Horario";
+$titulo_pagina = "Mi Horario";
 include_once '../includes/header.php';
 
-$flash_messages = get_flash_messages();
+$mensajes_flash = get_flash_messages();
 
-$current_user_id = $_SESSION['user_id'];
+$id_usuario_actual = $_SESSION['user_id'];
 
-// Obtener el id_estudiante y su id_curso_inicio del usuario logueado
-$stmt_estudiantes_details = $pdo->prepare("SELECT id, id_curso_inicio FROM estudiantes WHERE id_usuario = :id_usuario");
-$stmt_estudiantes_details->bindParam(':id_usuario', $current_user_id, PDO::PARAM_INT);
-$stmt_estudiantes_details->execute();
-$estudiantes_details = $stmt_estudiantes_details->fetch(PDO::FETCH_ASSOC);
+// Obtener el id_estudiante del usuario logueado
+$stmt_detalles_estudiante = $pdo->prepare("SELECT id FROM estudiantes WHERE id_usuario = :id_usuario");
+$stmt_detalles_estudiante->bindParam(':id_usuario', $id_usuario_actual, PDO::PARAM_INT);
+$stmt_detalles_estudiante->execute();
+$detalles_estudiante = $stmt_detalles_estudiante->fetch(PDO::FETCH_ASSOC);
 
-if (!$estudiantes_details) {
+if (!$detalles_estudiante) {
     set_flash_message('danger', 'Error: No se encontró el perfil de estudiante asociado a su usuario.');
     header('Location: ../logout.php');
     exit;
 }
-$id_estudiante_actual = $estudiantes_details['id'];
-$id_curso_inicio_estudiante = $estudiantes_details['id_curso_inicio'];
+$id_estudiante_actual = $detalles_estudiante['id'];
 
-// Obtener el semestre académico actual
-// Asegúrate de que esta función esté definida en includes/functions.php y devuelva el ID, numero_semestre y nombre_anio.
-// Y que tu tabla 'semestres' tenga una columna 'activo' (TINYINT(1)) para identificar el semestre actual.
-$current_semester = get_current_semester($pdo);
+// --- Obtener todos los cursos y semestres a los que ha estado el estudiante ---
+// Ordenar por año académico y semestre de forma descendente para mostrar los más recientes primero
+$stmt_historial_cursos_estudiante = $pdo->prepare("
+    SELECT ce.id_curso, ce.id_anio, sem.id AS id_semestre, sem.numero_semestre, aa.nombre_anio
+    FROM curso_estudiante ce
+    JOIN anios_academicos aa ON ce.id_anio = aa.id
+    JOIN semestres sem ON sem.id_anio_academico = aa.id
+    WHERE ce.id_estudiante = :id_estudiante
+    ORDER BY aa.nombre_anio DESC, sem.numero_semestre DESC
+");
+$stmt_historial_cursos_estudiante->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
+$stmt_historial_cursos_estudiante->execute();
+$historial_cursos_estudiante = $stmt_historial_cursos_estudiante->fetchAll(PDO::FETCH_ASSOC);
 
-$estudiantes_horarios = [];
-if ($current_semester) {
-    // Obtener las asignaturas en las que el estudiante está inscrito y confirmadas para el semestre actual
-    $stmt_enrolled_asignaturas = $pdo->prepare("
+$todos_horarios_estudiante = [];
+$pares_curso_semestre_procesados = []; // Para evitar duplicados de horarios
+
+foreach ($historial_cursos_estudiante as $entrada_curso) {
+    $id_curso_estudiante = $entrada_curso['id_curso'];
+    $id_anio_academico = $entrada_curso['id_anio'];
+    $id_semestre = $entrada_curso['id_semestre'];
+
+    $clave_par = $id_curso_estudiante . '-' . $id_semestre;
+    if (in_array($clave_par, $pares_curso_semestre_procesados)) {
+        continue;
+    }
+    $pares_curso_semestre_procesados[] = $clave_par;
+
+    // Obtener las asignaturas en las que el estudiante estuvo inscrito y confirmadas para este curso y semestre
+    $stmt_asignaturas_inscritas = $pdo->prepare("
         SELECT ie.id_asignatura
         FROM inscripciones_estudiantes ie
         WHERE ie.id_estudiante = :id_estudiante
         AND ie.id_semestre = :id_semestre
         AND ie.confirmada = 1
     ");
-    $stmt_enrolled_asignaturas->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
-    $stmt_enrolled_asignaturas->bindParam(':id_semestre', $current_semester['id'], PDO::PARAM_INT);
-    $stmt_enrolled_asignaturas->execute();
-    $enrolled_asignatura_ids = $stmt_enrolled_asignaturas->fetchAll(PDO::FETCH_COLUMN);
+    $stmt_asignaturas_inscritas->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
+    $stmt_asignaturas_inscritas->bindParam(':id_semestre', $id_semestre, PDO::PARAM_INT);
+    $stmt_asignaturas_inscritas->execute();
+    $ids_asignaturas_inscritas = $stmt_asignaturas_inscritas->fetchAll(PDO::FETCH_COLUMN);
 
-    if (!empty($enrolled_asignatura_ids)) {
-        // Construir la lista de placeholders para la cláusula IN
-        $placeholders = implode(',', array_fill(0, count($enrolled_asignatura_ids), '?'));
+    if (!empty($ids_asignaturas_inscritas)) {
+        $marcadores_posicion = implode(',', array_fill(0, count($ids_asignaturas_inscritas), '?'));
 
-        // Preparar el array de parámetros para execute
-        // El primer parámetro es para h.id_semestre
-        $params = [$current_semester['id']];
-        // Añadir todos los id de asignaturas inscritas
-        $params = array_merge($params, $enrolled_asignatura_ids);
-
-        // Obtener los horarios para esas asignaturas en el semestre actual
-        $stmt_horarios = $pdo->prepare("
+        // Obtener los horarios para esas asignaturas, este curso y este semestre
+        $sql_horarios = "
             SELECT
                 h.dia_semana, h.hora_inicio, h.hora_fin, h.turno,
                 a.nombre_asignatura,
                 p.nombre_completo AS nombre_profesor,
                 au.nombre_aula, au.ubicacion,
                 c.nombre_curso,
-                a.semestre_recomendado AS numero_semestre_asignatura
+                sem.numero_semestre,
+                aa.nombre_anio
             FROM horarios h
             JOIN asignaturas a ON h.id_asignatura = a.id
             JOIN usuarios p ON h.id_profesor = p.id
             JOIN aulas au ON h.id_aula = au.id
             JOIN cursos c ON h.id_curso = c.id
+            JOIN semestres sem ON h.id_semestre = sem.id
+            JOIN anios_academicos aa ON sem.id_anio_academico = aa.id
             WHERE h.id_semestre = ?
-            AND h.id_asignatura IN ($placeholders)
+            AND h.id_asignatura IN ($marcadores_posicion)
+            AND h.id_curso = ?
             ORDER BY FIELD(h.dia_semana, 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'), h.hora_inicio ASC
-        ");
+        ";
 
-        $stmt_horarios->execute($params);
-        $estudiantes_horarios = $stmt_horarios->fetchAll(PDO::FETCH_ASSOC);
+        $parametros = [$id_semestre];
+        $parametros = array_merge($parametros, $ids_asignaturas_inscritas);
+        $parametros[] = $id_curso_estudiante;
+
+        $stmt_horarios = $pdo->prepare($sql_horarios);
+        $stmt_horarios->execute($parametros);
+        $horarios_obtenidos = $stmt_horarios->fetchAll(PDO::FETCH_ASSOC);
+
+        $todos_horarios_estudiante = array_merge($todos_horarios_estudiante, $horarios_obtenidos);
     }
 }
 
-// --- Organizar el horario para la visualización en tabla de cuadrícula ---
-$organized_schedule = [];
-$unique_time_slots = []; // Para almacenar todas las franjas horarias únicas
+// Organizar el horario para la visualización en tabla de cuadrícula
+$horario_organizado = [];
+$franjas_horarias_unicas = []; // Para almacenar todas las franjas horarias únicas para el renderizado de la tabla
 
 // Días de la semana en el orden deseado (hasta Sábado)
-$days_of_week = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+$dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-foreach ($estudiantes_horarios as $item) {
-    $curso_nombre = $item['nombre_curso'];
-    $semestre_asignatura = $item['numero_semestre_asignatura']; // Semestre recomendado de la asignatura
+foreach ($todos_horarios_estudiante as $item) {
+    $nombre_anio_academico = $item['nombre_anio'];
+    $numero_semestre = $item['numero_semestre'];
+    $nombre_curso = $item['nombre_curso'];
     $turno = $item['turno'];
     $dia_semana = $item['dia_semana'];
     $hora_inicio = substr($item['hora_inicio'], 0, 5);
     $hora_fin = substr($item['hora_fin'], 0, 5);
-    $time_slot_key = $hora_inicio . ' - ' . $hora_fin;
+    $clave_franja_horaria = $hora_inicio . ' - ' . $hora_fin;
 
-    // Añadir la franja horaria a la lista de únicas
-    if (!in_array($time_slot_key, $unique_time_slots)) {
-        $unique_time_slots[] = $time_slot_key;
+    // Añadir la franja horaria a la lista de únicas para cada grupo (Año/Semestre/Curso/Turno)
+    if (!isset($franjas_horarias_unicas[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno])) {
+        $franjas_horarias_unicas[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno] = [];
+    }
+    if (!in_array($clave_franja_horaria, $franjas_horarias_unicas[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno])) {
+        $franjas_horarias_unicas[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno][] = $clave_franja_horaria;
     }
 
     // Inicializar la estructura si no existe
-    if (!isset($organized_schedule[$curso_nombre])) {
-        $organized_schedule[$curso_nombre] = [];
+    if (!isset($horario_organizado[$nombre_anio_academico])) {
+        $horario_organizado[$nombre_anio_academico] = [];
     }
-    if (!isset($organized_schedule[$curso_nombre][$semestre_asignatura])) {
-        $organized_schedule[$curso_nombre][$semestre_asignatura] = [];
+    if (!isset($horario_organizado[$nombre_anio_academico][$numero_semestre])) {
+        $horario_organizado[$nombre_anio_academico][$numero_semestre] = [];
     }
-    if (!isset($organized_schedule[$curso_nombre][$semestre_asignatura][$turno])) {
-        $organized_schedule[$curso_nombre][$semestre_asignatura][$turno] = [];
+    if (!isset($horario_organizado[$nombre_anio_academico][$numero_semestre][$nombre_curso])) {
+        $horario_organizado[$nombre_anio_academico][$numero_semestre][$nombre_curso] = [];
     }
-    if (!isset($organized_schedule[$curso_nombre][$semestre_asignatura][$turno][$time_slot_key])) {
-        $organized_schedule[$curso_nombre][$semestre_asignatura][$turno][$time_slot_key] = [];
+    if (!isset($horario_organizado[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno])) {
+        $horario_organizado[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno] = [];
+    }
+    if (!isset($horario_organizado[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno][$clave_franja_horaria])) {
+        $horario_organizado[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno][$clave_franja_horaria] = [];
         // Inicializar todos los días para esta franja horaria para asegurar celdas vacías
-        foreach ($days_of_week as $day) {
-            $organized_schedule[$curso_nombre][$semestre_asignatura][$turno][$time_slot_key][$day] = null;
+        foreach ($dias_semana as $dia) {
+            $horario_organizado[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno][$clave_franja_horaria][$dia] = null;
         }
     }
 
     // Asignar los detalles de la clase
-    $organized_schedule[$curso_nombre][$semestre_asignatura][$turno][$time_slot_key][$dia_semana] = [
+    $horario_organizado[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno][$clave_franja_horaria][$dia_semana] = [
         'asignatura' => $item['nombre_asignatura'],
         'profesor' => $item['nombre_profesor'],
         'aula' => $item['nombre_aula'],
@@ -134,53 +165,55 @@ foreach ($estudiantes_horarios as $item) {
     ];
 }
 
-// Ordenar las franjas horarias de forma ascendente
-usort($unique_time_slots, function($a, $b) {
-    $timeA = strtotime(explode(' - ', $a)[0]);
-    $timeB = strtotime(explode(' - ', $b)[0]);
-    return $timeA <=> $timeB;
-});
-
-// Ordenar los cursos, semestres y turnos para una visualización consistente
-ksort($organized_schedule); // Ordenar cursos alfabéticamente
-foreach ($organized_schedule as $curso_nombre => &$semestres) {
-    ksort($semestres); // Ordenar semestres numéricamente
-    foreach ($semestres as $semestre_asignatura => &$turnos) {
-        ksort($turnos); // Ordenar turnos alfabéticamente
+// Ordenar las franjas horarias de forma ascendente dentro de cada grupo
+foreach ($franjas_horarias_unicas as $clave_anio => &$datos_semestres) {
+    foreach ($datos_semestres as $clave_semestre => &$datos_cursos) {
+        foreach ($datos_cursos as $clave_curso => &$datos_turnos) {
+            foreach ($datos_turnos as $clave_turno => &$array_franjas_horarias) {
+                usort($array_franjas_horarias, function($a, $b) {
+                    $tiempoA = strtotime(explode(' - ', $a)[0]);
+                    $tiempoB = strtotime(explode(' - ', $b)[0]);
+                    return $tiempoA <=> $tiempoB;
+                });
+            }
+        }
     }
 }
-unset($semestres); // Romper la referencia al último elemento
-unset($turnos); // Romper la referencia al último elemento
+unset($datos_semestres);
+unset($datos_cursos);
+unset($datos_turnos);
+unset($array_franjas_horarias);
 
 ?>
 
 <h1 class="mt-4">Mi Horario de Clases</h1>
-<p class="lead">Consulta tu horario para el semestre actual.</p>
+<p class="lead">Consulta tus horarios de clases organizados por año académico y semestre.</p>
 
-<?php if (!$current_semester): ?>
-    <div class="alert alert-info">
-        Actualmente no hay un semestre académico activo para mostrar un horario.
-    </div>
-<?php elseif (empty($estudiantes_horarios)): ?>
+<?php if (empty($todos_horarios_estudiante)): ?>
     <div class="alert alert-warning">
-        No tienes clases programadas para el semestre actual o tu inscripción aún no ha sido confirmada por la administración.
+        No tienes clases programadas o tu inscripción aún no ha sido confirmada por la administración para ningún curso/semestre.
     </div>
 <?php else: ?>
-    <div class="alert alert-info">
-        **Semestre Actual de Inscripción:** <?php echo htmlspecialchars($current_semester['numero_semestre'] . ' (' . $current_semester['nombre_anio'] . ')'); ?>
-    </div>
+    <?php
+    // Obtener el semestre académico actual para el mensaje informativo
+    $info_semestre_actual = get_current_semester($pdo);
+    if ($info_semestre_actual):
+    ?>
+        <div class="alert alert-info">
+            **Semestre Actual Activo:** <?php echo htmlspecialchars($info_semestre_actual['numero_semestre'] . ' (' . $info_semestre_actual['nombre_anio'] . ')'); ?>
+        </div>
+    <?php endif; ?>
 
-    <?php if (empty($organized_schedule)): ?>
-        <p class="text-center">No hay clases programadas para tus asignaturas confirmadas en este semestre.</p>
-    <?php else: ?>
-        <?php foreach ($organized_schedule as $curso_nombre => $semestres): ?>
-            <?php foreach ($semestres as $semestre_asignatura => $turnos): ?>
-                <?php foreach ($turnos as $turno => $time_slots_data): ?>
+    <?php foreach ($horario_organizado as $nombre_anio_academico => $semestres): ?>
+        <?php foreach ($semestres as $numero_semestre => $cursos): ?>
+            <?php foreach ($cursos as $nombre_curso => $turnos): ?>
+                <?php foreach ($turnos as $turno => $datos_franjas_horarias): ?>
                     <div class="card shadow-sm mb-4">
                         <div class="card-header bg-primary text-white">
                             <h5 class="mb-0">
-                                Curso: <?php echo htmlspecialchars($curso_nombre); ?> |
-                                Semestre: <?php echo htmlspecialchars($semestre_asignatura); ?> |
+                                Año: <?php echo htmlspecialchars($nombre_anio_academico); ?> |
+                                Semestre: <?php echo htmlspecialchars($numero_semestre); ?> |
+                                Curso: <?php echo htmlspecialchars($nombre_curso); ?> |
                                 Turno: <?php echo htmlspecialchars($turno); ?>
                             </h5>
                         </div>
@@ -190,24 +223,28 @@ unset($turnos); // Romper la referencia al último elemento
                                     <thead>
                                         <tr class="table-light">
                                             <th style="width: 10%;">Hora</th>
-                                            <?php foreach ($days_of_week as $day): ?>
-                                                <th><?php echo htmlspecialchars($day); ?></th>
+                                            <?php foreach ($dias_semana as $dia): ?>
+                                                <th><?php echo htmlspecialchars($dia); ?></th>
                                             <?php endforeach; ?>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($unique_time_slots as $time_slot): ?>
+                                        <?php
+                                        // Asegurarse de que las franjas horarias estén ordenadas para este grupo específico
+                                        $franjas_ordenadas_para_este_grupo = $franjas_horarias_unicas[$nombre_anio_academico][$numero_semestre][$nombre_curso][$turno];
+                                        foreach ($franjas_ordenadas_para_este_grupo as $franja_horaria):
+                                        ?>
                                             <tr>
-                                                <td class="fw-bold"><?php echo htmlspecialchars($time_slot); ?></td>
-                                                <?php foreach ($days_of_week as $day): ?>
+                                                <td class="fw-bold"><?php echo htmlspecialchars($franja_horaria); ?></td>
+                                                <?php foreach ($dias_semana as $dia): ?>
                                                     <td>
                                                         <?php
-                                                        $class_info = $time_slots_data[$time_slot][$day] ?? null;
-                                                        if ($class_info):
+                                                        $info_clase = $datos_franjas_horarias[$franja_horaria][$dia] ?? null;
+                                                        if ($info_clase):
                                                         ?>
-                                                            <strong class="d-block"><?php echo htmlspecialchars($class_info['asignatura']); ?></strong>
-                                                            <small class="d-block text-muted">Profesor: <?php echo htmlspecialchars($class_info['profesor']); ?></small>
-                                                            <small class="d-block text-muted">Aula: <?php echo htmlspecialchars($class_info['aula'] . ' (' . $class_info['ubicacion'] . ')'); ?></small>
+                                                            <strong class="d-block text-primary"><?php echo htmlspecialchars($info_clase['asignatura']); ?></strong>
+                                                            <small class="d-block text-muted">Profesor: <?php echo htmlspecialchars($info_clase['profesor']); ?></small>
+                                                            <small class="d-block text-secondary">Aula: <?php echo htmlspecialchars($info_clase['aula'] . ' (' . $info_clase['ubicacion'] . ')'); ?></small>
                                                         <?php else: ?>
                                                             —
                                                         <?php endif; ?>
@@ -223,7 +260,7 @@ unset($turnos); // Romper la referencia al último elemento
                 <?php endforeach; ?>
             <?php endforeach; ?>
         <?php endforeach; ?>
-    <?php endif; ?>
+    <?php endforeach; ?>
 <?php endif; ?>
 
 <?php include_once '../includes/footer.php'; ?>
@@ -232,46 +269,46 @@ unset($turnos); // Romper la referencia al último elemento
 </div>
 
 <script>
-    const flashMessages = <?php echo json_encode($flash_messages); ?>;
+    const mensajesFlash = <?php echo json_encode($mensajes_flash); ?>;
 
-    function showToast(type, message) {
-        const toastContainer = document.querySelector('.toast-container');
-        const toastId = 'toast-' + Date.now();
+    function mostrarToast(tipo, mensaje) {
+        const contenedorToast = document.querySelector('.toast-container');
+        const idToast = 'toast-' + Date.now();
 
-        let bgColor = '';
-        let icon = ''; // Added icon variable
-        switch (type) {
-            case 'success': bgColor = 'bg-success'; icon = '<i class="fas fa-check-circle me-2"></i>'; break;
-            case 'danger': bgColor = 'bg-danger'; icon = '<i class="fas fa-exclamation-triangle me-2"></i>'; break;
-            case 'warning': bgColor = 'bg-warning text-dark'; icon = '<i class="fas fa-exclamation-circle me-2"></i>'; break;
-            case 'info': bgColor = 'bg-info'; icon = '<i class="fas fa-info-circle me-2"></i>'; break;
-            default: bgColor = 'bg-secondary'; icon = '<i class="fas fa-bell me-2"></i>'; break;
+        let colorFondo = '';
+        let icono = '';
+        switch (tipo) {
+            case 'success': colorFondo = 'bg-success'; icono = '<i class="fas fa-check-circle me-2"></i>'; break;
+            case 'danger': colorFondo = 'bg-danger'; icono = '<i class="fas fa-exclamation-triangle me-2"></i>'; break;
+            case 'warning': colorFondo = 'bg-warning text-dark'; icono = '<i class="fas fa-exclamation-circle me-2"></i>'; break;
+            case 'info': colorFondo = 'bg-info'; icono = '<i class="fas fa-info-circle me-2"></i>'; break;
+            default: colorFondo = 'bg-secondary'; icono = '<i class="fas fa-bell me-2"></i>'; break;
         }
 
-        const toastHtml = `
-            <div id="${toastId}" class="toast align-items-center text-white ${bgColor} border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+        const htmlToast = `
+            <div id="${idToast}" class="toast align-items-center text-white ${colorFondo} border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
                 <div class="d-flex">
                     <div class="toast-body d-flex align-items-center">
-                        ${icon} ${message}
+                        ${icono} ${mensaje}
                     </div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
                 </div>
             </div>
         `;
-        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+        contenedorToast.insertAdjacentHTML('beforeend', htmlToast);
 
-        const toastElement = document.getElementById(toastId);
-        const toast = new bootstrap.Toast(toastElement);
+        const elementoToast = document.getElementById(idToast);
+        const toast = new bootstrap.Toast(elementoToast);
         toast.show();
 
-        toastElement.addEventListener('hidden.bs.toast', function () {
-            toastElement.remove();
+        elementoToast.addEventListener('hidden.bs.toast', function () {
+            elementoToast.remove();
         });
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        flashMessages.forEach(msg => {
-            showToast(msg.type, msg.message);
+        mensajesFlash.forEach(msg => {
+            mostrarToast(msg.type, msg.message);
         });
     });
 </script>

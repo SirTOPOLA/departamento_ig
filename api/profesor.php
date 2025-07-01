@@ -2,7 +2,7 @@
 require_once '../includes/functions.php';
 session_start();
 // Asegúrate de que solo los administradores puedan acceder a este archivo AJAX
-if ( $_SESSION['user_role'] !== 'Administrador') {
+if ($_SESSION['user_role'] !== 'Administrador') {
     header('Content-Type: application/json');
     echo json_encode(['success' => false, 'message' => 'Acceso denegado.']);
     exit();
@@ -131,7 +131,7 @@ switch ($action) {
                     if (!isset($subject['nombre_asignatura']) || $subject['nombre_asignatura'] === null) {
                         $subject['nombre_asignatura'] = ''; // Convertir null a string vacío
                     } else {
-                        $subject['nombre_asignatura'] = (string)$subject['nombre_asignatura']; // Asegurar que sea string
+                        $subject['nombre_asignatura'] = (string) $subject['nombre_asignatura']; // Asegurar que sea string
                     }
                 }
                 // --- FIN DE LA MODIFICACIÓN ---
@@ -193,6 +193,105 @@ switch ($action) {
     default:
         // Already set to invalid action
         break;
+}
+
+
+
+// En profesor.php
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_assigned_subject') {
+    header('Content-Type: application/json');
+    $id_asignacion = filter_var($_POST['id_asignacion'], FILTER_VALIDATE_INT);
+
+    if (!$id_asignacion) {
+        echo json_encode(['success' => false, 'message' => 'ID de asignación inválido.']);
+        exit();
+    }
+
+    try {
+        $stmt = $pdo->prepare("DELETE FROM profesores_asignaturas_asignadas WHERE id = :id_asignacion");
+        $stmt->bindParam(':id_asignacion', $id_asignacion, PDO::PARAM_INT);
+
+        if ($stmt->execute()) {
+            echo json_encode(['success' => true, 'message' => 'Asignatura desasignada con éxito.']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Error al desasignar la asignatura.']);
+        }
+    } catch (PDOException $e) {
+        error_log("Error al desasignar asignatura: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Error de base de datos al desasignar asignatura.']);
+    }
+    exit();
+}
+
+// En profesor.php
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'assign_subject_oficial') {
+    header('Content-Type: application/json');
+    $id_profesor = filter_var($_POST['id_profesor'], FILTER_VALIDATE_INT);
+    $id_asignatura = filter_var($_POST['id_asignatura'], FILTER_VALIDATE_INT);
+
+    if (!$id_profesor || !$id_asignatura) {
+        echo json_encode(['success' => false, 'message' => 'Datos inválidos para asignar asignatura.']);
+        exit();
+    }
+
+    try {
+        // Verificar si la asignatura ya está asignada
+        $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM profesores_asignaturas_asignadas WHERE id_profesor = :id_profesor AND id_asignatura = :id_asignatura");
+        $stmt_check->bindParam(':id_profesor', $id_profesor, PDO::PARAM_INT);
+        $stmt_check->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
+        $stmt_check->execute();
+
+        if ($stmt_check->fetchColumn() > 0) {
+            echo json_encode(['success' => false, 'message' => 'Esta asignatura ya está asignada a este profesor.']);
+            exit();
+        }
+
+        $stmt = $pdo->prepare("INSERT INTO profesores_asignaturas_asignadas (id_profesor, id_asignatura, fecha_asignacion) VALUES (:id_profesor, :id_asignatura, NOW())");
+        $stmt->bindParam(':id_profesor', $id_profesor, PDO::PARAM_INT);
+        $stmt->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
+
+        if ($stmt->execute()) {
+            echo json_encode(['success' => true, 'message' => 'Asignatura asignada oficialmente con éxito.']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Error al asignar la asignatura.']);
+        }
+    } catch (PDOException $e) {
+        error_log("Error al asignar asignatura oficialmente: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Error de base de datos al asignar asignatura.']);
+    }
+    exit();
+}
+
+
+// En profesor.php
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_assigned_subjects') {
+    header('Content-Type: application/json');
+    $id_profesor = filter_var($_GET['id_profesor'], FILTER_VALIDATE_INT);
+
+    if (!$id_profesor) {
+        echo json_encode(['success' => false, 'message' => 'ID de profesor inválido.']);
+        exit();
+    }
+
+    try {
+        // Unir con la tabla asignaturas para obtener el nombre
+        $stmt = $pdo->prepare("
+            SELECT pa.id, a.nombre_asignatura
+            FROM profesores_asignaturas_asignadas pa
+            JOIN asignaturas a ON pa.id_asignatura = a.id
+            WHERE pa.id_profesor = :id_profesor
+            ORDER BY a.nombre_asignatura ASC
+        ");
+        $stmt->bindParam(':id_profesor', $id_profesor, PDO::PARAM_INT);
+        $stmt->execute();
+        $subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode(['success' => true, 'subjects' => $subjects]);
+    } catch (PDOException $e) {
+        error_log("Error al obtener asignaturas asignadas: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Error de base de datos al obtener asignaturas asignadas.']);
+    }
+    exit();
 }
 
 echo json_encode($response);
