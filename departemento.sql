@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 01-07-2025 a las 15:05:04
+-- Tiempo de generación: 01-07-2025 a las 17:04:37
 -- Versión del servidor: 10.4.32-MariaDB
 -- Versión de PHP: 8.0.30
 
@@ -223,6 +223,14 @@ CREATE TABLE `historial_academico` (
   `fecha_actualizacion` datetime DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Volcado de datos para la tabla `historial_academico`
+--
+
+INSERT INTO `historial_academico` (`id`, `id_estudiante`, `id_asignatura`, `id_semestre`, `nota_final`, `estado_final`, `fecha_actualizacion`) VALUES
+(1, 12, 14, 2, 0.00, '', '2025-07-01 16:03:18'),
+(2, 12, 11, 2, 0.00, '', '2025-07-01 16:03:22');
+
 -- --------------------------------------------------------
 
 --
@@ -247,7 +255,9 @@ CREATE TABLE `horarios` (
 --
 
 INSERT INTO `horarios` (`id`, `id_semestre`, `id_asignatura`, `id_curso`, `id_profesor`, `id_aula`, `dia_semana`, `hora_inicio`, `hora_fin`, `turno`) VALUES
-(2, 2, 11, 1, 1, 1, 'Lunes', '12:00:00', '13:00:00', 'Tarde');
+(2, 2, 11, 1, 1, 1, 'Lunes', '12:00:00', '13:00:00', 'Tarde'),
+(3, 2, 11, 1, 1, 1, 'Miércoles', '16:00:00', '17:00:00', 'Noche'),
+(4, 2, 14, 1, 2, 1, 'Martes', '16:00:00', '18:00:00', 'Noche');
 
 -- --------------------------------------------------------
 
@@ -270,7 +280,9 @@ CREATE TABLE `inscripciones_estudiantes` (
 
 INSERT INTO `inscripciones_estudiantes` (`id`, `id_estudiante`, `id_semestre`, `id_asignatura`, `fecha_inscripcion`, `confirmada`) VALUES
 (7, 1, 2, 11, '2025-06-29 23:07:12', 1),
-(8, 1, 2, 14, '2025-06-29 23:07:12', 1);
+(8, 1, 2, 14, '2025-06-29 23:07:12', 1),
+(9, 12, 2, 11, '2025-07-01 14:35:16', 1),
+(10, 12, 2, 14, '2025-07-01 14:35:16', 1);
 
 -- --------------------------------------------------------
 
@@ -310,7 +322,8 @@ CREATE TABLE `profesores` (
 --
 
 INSERT INTO `profesores` (`id`, `id_usuario`, `especialidad`, `grado_academico`) VALUES
-(1, 9, 'Matematicas', 'Licenciatura');
+(1, 9, 'Matematicas', 'Licenciatura'),
+(2, 24, 'Bases de datos', 'Master');
 
 -- --------------------------------------------------------
 
@@ -330,7 +343,8 @@ CREATE TABLE `profesores_asignaturas_asignadas` (
 --
 
 INSERT INTO `profesores_asignaturas_asignadas` (`id`, `id_profesor`, `id_asignatura`, `fecha_asignacion`) VALUES
-(1, 1, 11, '2025-07-01 13:56:26');
+(1, 1, 11, '2025-07-01 13:56:26'),
+(2, 2, 14, '2025-07-01 15:13:41');
 
 -- --------------------------------------------------------
 
@@ -476,7 +490,8 @@ INSERT INTO `usuarios` (`id`, `nombre_usuario`, `password_hash`, `id_rol`, `nomb
 (12, 'melania', '$2y$10$7M/rOsyFDa.1FAv08iMrNuVC.Pz8JECDC2jCaQtzFdX5mD0tWS9/C', 2, 'Melania Sima', 'sima@gmail.com', '555120124', '0112431', 'Activo', '2025-06-29 16:19:54'),
 (13, 'mia', '$2y$10$n5is0tAZ/.uL47tQfLUk.e3SSVPxi03hJBjTK8GCFDq6sl6cFWaZG', 2, 'Mia Antonia Supe', 'mia@gmail.com', '222457487', '0014521', 'Activo', '2025-07-01 11:59:12'),
 (22, 'lucia', '$2y$10$xbuencvwlP43ow9tkj.OhOXWH28uVdivIKW/BF1qWn7wi1xVoyi5O', 2, 'Lucia Boko', 'lucia@gmail.com', '222457896', '000914578', 'Activo', '2025-07-01 13:27:02'),
-(23, 'monica', '$2y$10$8daDKLkojNalZU.Wt2FGCuRLO9aSKli8SQfN/EBH26J179ZRCm.nq', 2, 'monica mons', 'monica@gmail.com', '222145014', '0012101', 'Activo', '2025-07-01 14:01:54');
+(23, 'monica', '$2y$10$8daDKLkojNalZU.Wt2FGCuRLO9aSKli8SQfN/EBH26J179ZRCm.nq', 2, 'monica mons', 'monica@gmail.com', '222145014', '0012101', 'Activo', '2025-07-01 14:01:54'),
+(24, 'nestor', '$2y$10$qILSO7a.vvBVvDJLolrpi.TTBL.UsdjBczIrnwcff1nFXPFiddVNC', 3, 'Nestor Mba', 'nestor@gmail.com', '222014578', '000124570', 'Activo', '2025-07-01 15:13:17');
 
 --
 -- Índices para tablas volcadas
@@ -698,19 +713,19 @@ ALTER TABLE `estudiantes`
 -- AUTO_INCREMENT de la tabla `historial_academico`
 --
 ALTER TABLE `historial_academico`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `horarios`
 --
 ALTER TABLE `horarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT de la tabla `inscripciones_estudiantes`
 --
 ALTER TABLE `inscripciones_estudiantes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT de la tabla `notas`
@@ -722,13 +737,13 @@ ALTER TABLE `notas`
 -- AUTO_INCREMENT de la tabla `profesores`
 --
 ALTER TABLE `profesores`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `profesores_asignaturas_asignadas`
 --
 ALTER TABLE `profesores_asignaturas_asignadas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `profesores_asignaturas_sugeridas`
@@ -764,7 +779,7 @@ ALTER TABLE `semestres`
 -- AUTO_INCREMENT de la tabla `usuarios`
 --
 ALTER TABLE `usuarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
 
 --
 -- Restricciones para tablas volcadas
