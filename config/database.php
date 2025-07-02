@@ -1,7 +1,7 @@
 <?php
 // Configuración de la base de datos
 define('DB_HOST', 'localhost'); // Usualmente 'localhost'
-define('DB_NAME', 'departemento'); // ¡Cambia esto por el nombre real de tu BD!
+define('DB_NAME', 'departamento'); // ¡Cambia esto por el nombre real de tu BD!
 define('DB_USER', 'root');       // ¡Cambia esto por tu usuario de BD!
 define('DB_PASS', '');      // ¡Cambia esto por tu contraseña de BD!
 define('DB_CHARSET', 'utf8mb4');

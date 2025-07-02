@@ -76,18 +76,20 @@ foreach ($historial_cursos_estudiante as $entrada_curso) {
         $marcadores_posicion = implode(',', array_fill(0, count($ids_asignaturas_inscritas), '?'));
 
         // Obtener los horarios para esas asignaturas, este curso y este semestre
+        // *** CAMBIO CLAVE AQUÍ: Ajuste en los JOINs para obtener el nombre del profesor ***
         $sql_horarios = "
             SELECT
                 h.dia_semana, h.hora_inicio, h.hora_fin, h.turno,
                 a.nombre_asignatura,
-                p.nombre_completo AS nombre_profesor,
+                UP.nombre_completo AS nombre_profesor, -- Alias 'UP' para el nombre del usuario del profesor
                 au.nombre_aula, au.ubicacion,
                 c.nombre_curso,
                 sem.numero_semestre,
                 aa.nombre_anio
             FROM horarios h
             JOIN asignaturas a ON h.id_asignatura = a.id
-            JOIN usuarios p ON h.id_profesor = p.id
+            JOIN profesores P_ALIAS ON h.id_profesor = P_ALIAS.id -- Unimos con la tabla 'profesores'
+            JOIN usuarios UP ON P_ALIAS.id_usuario = UP.id -- Luego unimos 'profesores' con 'usuarios' para obtener el nombre completo
             JOIN aulas au ON h.id_aula = au.id
             JOIN cursos c ON h.id_curso = c.id
             JOIN semestres sem ON h.id_semestre = sem.id

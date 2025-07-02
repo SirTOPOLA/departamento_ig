@@ -93,15 +93,15 @@
                         <a href="../profesores/index.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'index.php' && $current_folder == 'profesores') ? 'active' : ''; ?>">
     <i class="fas fa-home me-2"></i> Panel Principal
 </a>
-<a href="../profesores/my_subjects.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'my_subjects.php') ? 'active' : ''; ?>">
+<!-- <a href="../profesores/my_subjects.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'my_subjects.php') ? 'active' : ''; ?>">
     <i class="fas fa-chalkboard me-2"></i> Mis Asignaturas
-</a>
+</a> -->
 <a href="../profesores/actas.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'actas.php') ? 'active' : ''; ?>">
     <i class="fas fa-clipboard-list me-2"></i> Gestión de Notas
 </a>
-<a href="../profesores/estudiantes_lists.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'estudiantes_lists.php') ? 'active' : ''; ?>">
+<!-- <a href="../profesores/estudiantes_lists.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'estudiantes_lists.php') ? 'active' : ''; ?>">
     <i class="fas fa-users me-2"></i> Listado de Estudiantes
-</a>
+</a> -->
 <!-- <a href="../profesores/upload_cv.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'upload_cv.php') ? 'active' : ''; ?>">
     <i class="fas fa-file-upload me-2"></i> Subir CV
 </a> -->

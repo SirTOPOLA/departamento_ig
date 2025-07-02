@@ -1,6 +1,6 @@
 <?php
 require_once '../includes/functions.php';
-
+ 
 check_login_and_role('Administrador');
 
 require_once '../config/database.php';
@@ -26,146 +26,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         set_flash_message('danger', 'Error: La fecha de inicio debe ser anterior a la fecha de fin.');
     } else {
         try {
-            // Iniciar transacción para asegurar atomicidad de la creación del año y la actualización de estudiantes
-            $pdo->beginTransaction();
-
             if ($action === 'add') {
                 $stmt = $pdo->prepare("INSERT INTO anios_academicos (nombre_anio, fecha_inicio, fecha_fin) VALUES (:nombre_anio, :fecha_inicio, :fecha_fin)");
                 $stmt->bindParam(':nombre_anio', $nombre_anio);
                 $stmt->bindParam(':fecha_inicio', $fecha_inicio);
                 $stmt->bindParam(':fecha_fin', $fecha_fin);
                 $stmt->execute();
-                $new_anio_id = $pdo->lastInsertId(); // Obtener el ID del año recién insertado
-
-                // --- Lógica para actualizar los cursos de los estudiantes ---
-                // 1. Obtener el ID del año académico anterior
-                // Se asume que el "año anterior" es el año con el ID más alto antes del recién creado.
-                $stmt_prev_anio = $pdo->prepare("SELECT id FROM anios_academicos WHERE id < :new_anio_id ORDER BY id DESC LIMIT 1");
-                $stmt_prev_anio->bindParam(':new_anio_id', $new_anio_id, PDO::PARAM_INT);
-                $stmt_prev_anio->execute();
-                $prev_anio_id = $stmt_prev_anio->fetchColumn();
-
-                if ($prev_anio_id) {
-                    // Obtener todos los estudiantes actualmente activos en el año anterior
-                    // También necesitamos el id del curso actual para determinar el avance
-                    $stmt_students = $pdo->prepare("
-                        SELECT ce.id AS curso_estudiante_id, ce.id_estudiante, ce.id_curso,
-                                c.nombre_curso
-                        FROM curso_estudiante ce
-                        JOIN cursos c ON ce.id_curso = c.id
-                        WHERE ce.id_anio = :prev_anio_id AND ce.estado = 'activo'
-                    ");
-                    $stmt_students->bindParam(':prev_anio_id', $prev_anio_id, PDO::PARAM_INT);
-                    $stmt_students->execute();
-                    $students_to_update = $stmt_students->fetchAll(PDO::FETCH_ASSOC);
-
-                    foreach ($students_to_update as $student) {
-                        $student_id = $student['id_estudiante'];
-                        $current_course_id = $student['id_curso'];
-                        $current_curso_estudiante_id = $student['curso_estudiante_id'];
-                        $nombre_curso_actual = $student['nombre_curso'];
-
-                        // 2. Verificar si el estudiante ha aprobado AL MENOS UNA asignatura de su curso en el año anterior
-                        $stmt_approved_any_asignatura = $pdo->prepare("
-                            SELECT COUNT(DISTINCT ha.id_asignatura)
-                            FROM historial_academico ha
-                            JOIN asignaturas a ON ha.id_asignatura = a.id
-                            JOIN semestres s ON ha.id_semestre = s.id
-                            WHERE ha.id_estudiante = :student_id
-                            AND ha.estado_final = 'APROBADO'
-                            AND s.id_anio_academico = :prev_anio_id
-                            AND a.id_curso = :current_course_id
-                        ");
-                        $stmt_approved_any_asignatura->bindParam(':student_id', $student_id, PDO::PARAM_INT);
-                        $stmt_approved_any_asignatura->bindParam(':prev_anio_id', $prev_anio_id, PDO::PARAM_INT);
-                        $stmt_approved_any_asignatura->bindParam(':current_course_id', $current_course_id, PDO::PARAM_INT);
-                        $stmt_approved_any_asignatura->execute();
-                        $approved_asignaturas_count = $stmt_approved_any_asignatura->fetchColumn();
-
-                        // Lógica para determinar si avanza de curso
-                        $should_advance = ($approved_asignaturas_count > 0);
-                        $next_course_id = $current_course_id;
-                        $curso_estudiante_estado_anterior = 'reprobado'; // Por defecto, si no cumple la condición de avance
-                        $create_new_course_entry = false; // Por defecto, no se crea nueva entrada
-
-                        // Obtener los IDs de los cursos 'Primero', 'Segundo', 'Tercero'
-                        // Esto se hace una vez para eficiencia o se asume conocimiento de sus IDs (ej. 1, 2, 3)
-                        // Para robustez, es mejor consultarlos:
-                        static $course_ids = [];
-                        if (empty($course_ids)) {
-                            $stmt_courses = $pdo->query("SELECT id, nombre_curso FROM cursos");
-                            while ($row = $stmt_courses->fetch(PDO::FETCH_ASSOC)) {
-                                $course_ids[$row['nombre_curso']] = $row['id'];
-                            }
-                        }
-
-                        if ($should_advance) {
-                            if ($current_course_id == $course_ids['Primero']) { // Estaba en Primero
-                                $next_course_id = $course_ids['Segundo'] ?? null;
-                                $curso_estudiante_estado_anterior = 'finalizado';
-                                $create_new_course_entry = true;
-                            } elseif ($current_course_id == $course_ids['Segundo']) { // Estaba en Segundo
-                                $next_course_id = $course_ids['Tercero'] ?? null;
-                                $curso_estudiante_estado_anterior = 'finalizado';
-                                $create_new_course_entry = true;
-                            } elseif ($current_course_id == $course_ids['Tercero']) { // Estaba en Tercero
-                                // Se mantiene en Tercero, pero marca el anterior como finalizado
-                                $next_course_id = $course_ids['Tercero'] ?? null; // Sigue siendo tercero
-                                $curso_estudiante_estado_anterior = 'finalizado';
-                                $create_new_course_entry = true; // Crea nueva entrada para el nuevo año en Tercero
-                            } else {
-                                // Cualquier otro curso que no tiene una progresión automática definida
-                                // O no se hace nada o se mantiene en el mismo curso sin marcar como finalizado.
-                                // Para este caso, vamos a considerar que no avanza automáticamente.
-                                $should_advance = false; // Revertir a no avanzar si el curso no es 1, 2 o 3.
-                                $curso_estudiante_estado_anterior = 'reprobado';
-                                $create_new_course_entry = false;
-                            }
-                        }
-                        
-                        // Si no hay asignaturas aprobadas (y no es el caso de Tercero que no aprobó ninguna en su propio curso)
-                        // Para los cursos 1 y 2, si no aprobó ninguna, se marca como reprobado y NO AVANZA
-                        if (!$should_advance && ($current_course_id == $course_ids['Primero'] || $current_course_id == $course_ids['Segundo'])) {
-                             $curso_estudiante_estado_anterior = 'reprobado';
-                             $create_new_course_entry = false; // No se crea nueva entrada si reprobó totalmente
-                        } elseif (!$should_advance && $current_course_id == $course_ids['Tercero']) {
-                            // Si está en tercero y no aprobó ninguna, se marca como reprobado y no se crea nueva entrada (si es el fin de ciclo)
-                            // Si debe repetir tercero, entonces la lógica cambia y sí se crearía una entrada con el mismo curso.
-                            // Por la descripción original "se mantiene en tercero", la nueva entrada con 'activo' solo se crea si 'should_advance' es true para tercero.
-                            $curso_estudiante_estado_anterior = 'reprobado';
-                            $create_new_course_entry = false; // Asumiendo que no avanza/continúa en tercero si reprobó todo
-                        }
-
-
-                        // 3. Actualizar el estado del registro actual de curso_estudiante (del año anterior)
-                        $stmt_update_current_ce = $pdo->prepare("
-                            UPDATE curso_estudiante
-                            SET estado = :estado, fecha_finalizacion = NOW()
-                            WHERE id = :curso_estudiante_id
-                        ");
-                        $stmt_update_current_ce->bindParam(':estado', $curso_estudiante_estado_anterior);
-                        $stmt_update_current_ce->bindParam(':curso_estudiante_id', $current_curso_estudiante_id, PDO::PARAM_INT);
-                        $stmt_update_current_ce->execute();
-
-                        // 4. Crear un nuevo registro en curso_estudiante para el siguiente año si avanza
-                        if ($create_new_course_entry && $next_course_id) {
-                            $stmt_insert_next_ce = $pdo->prepare("
-                                INSERT INTO curso_estudiante (id_estudiante, id_curso, id_anio, estado, fecha_registro)
-                                VALUES (:id_estudiante, :id_curso, :id_anio, 'activo', NOW())
-                            ");
-                            $stmt_insert_next_ce->bindParam(':id_estudiante', $student_id, PDO::PARAM_INT);
-                            $stmt_insert_next_ce->bindParam(':id_curso', $next_course_id, PDO::PARAM_INT);
-                            $stmt_insert_next_ce->bindParam(':id_anio', $new_anio_id, PDO::PARAM_INT);
-                            $stmt_insert_next_ce->execute();
-                        }
-                    }
-                } else {
-                    set_flash_message('info', 'No se encontró un año académico anterior para procesar la progresión de estudiantes.');
-                }
-                // --- Fin de la lógica para actualizar los cursos de los estudiantes ---
-
-                set_flash_message('success', 'Año académico añadido correctamente y cursos de estudiantes actualizados.');
-
+                set_flash_message('success', 'Año académico añadido correctamente.');
             } elseif ($action === 'edit') {
                 if ($id === null) {
                     set_flash_message('danger', 'Error: ID de año académico no válido para edición.');
@@ -189,11 +56,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($stmt_check->fetchColumn() > 0) {
                         set_flash_message('danger', 'Error: No se puede eliminar el año académico porque tiene semestres asociados.');
                     } else {
-                        // Opcional: Eliminar registros de curso_estudiante asociados a este año si se elimina
-                        // $stmt_delete_ce = $pdo->prepare("DELETE FROM curso_estudiante WHERE id_anio = :id");
-                        // $stmt_delete_ce->bindParam(':id', $id);
-                        // $stmt_delete_ce->execute();
-
                         $stmt = $pdo->prepare("DELETE FROM anios_academicos WHERE id = :id");
                         $stmt->bindParam(':id', $id);
                         $stmt->execute();
@@ -201,16 +63,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            $pdo->commit(); // Confirmar la transacción
         } catch (PDOException $e) {
-            $pdo->rollBack(); // Revertir la transacción en caso de error
             // Manejar errores de duplicidad (ej. nombre_anio UNIQUE)
             if ($e->getCode() == '23000') { // Código SQLSTATE para violación de integridad
                 set_flash_message('danger', 'Error: El nombre del año académico ya existe o hay un conflicto de datos.');
             } else {
-                set_flash_message('danger', 'Error de base de datos al procesar año académico o estudiantes: ' . $e->getMessage());
-                // Considera loggear el error completo para depuración
-                error_log("Error al procesar año académico: " . $e->getMessage() . " en " . $e->getFile() . " en la línea " . $e->getLine());
+                set_flash_message('danger', 'Error de base de datos: ' . $e->getMessage());
             }
         }
     }
@@ -239,6 +97,7 @@ $flash_messages = get_flash_messages();
     </div>
 </div>
 
+<!-- Tabla de Listado de Años Académicos -->
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-info text-white">
         <h5 class="mb-0">Lista de Años Académicos</h5>
@@ -290,11 +149,13 @@ $flash_messages = get_flash_messages();
         </div>
         <nav>
             <ul class="pagination justify-content-center" id="pagination">
-                </ul>
+                <!-- Pagination links will be injected here by JavaScript -->
+            </ul>
         </nav>
     </div>
 </div>
 
+<!-- Modal para Añadir/Editar Año Académico -->
 <div class="modal fade" id="yearModal" tabindex="-1" aria-labelledby="yearModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-md">
         <div class="modal-content">
@@ -336,8 +197,10 @@ $flash_messages = get_flash_messages();
 
 <?php include_once '../includes/footer.php'; ?>
 
+<!-- Contenedor para los Toasts de Bootstrap -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
-    </div>
+    <!-- Los toasts se inyectarán aquí -->
+</div>
 
 <script>
     const flashMessages = <?php echo json_encode($flash_messages); ?>;

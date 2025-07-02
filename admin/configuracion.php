@@ -12,14 +12,21 @@ $current_folder = basename(dirname($_SERVER['PHP_SELF']));
 $message = '';
 $message_type = '';
 
-// Directorio para subir archivos (asegúrate de que exista y tenga permisos de escritura)
-$upload_dir = '../uploads/';
+ 
+// Modificaremos esto para que la BD solo guarde 'uploads/configuracion/nombre_archivo.ext'
+$base_upload_path = 'uploads/configuracion/'; // Ruta relativa a la raíz del sitio web
+
+// Directorio físico completo para subir archivos
+// Usamos $_SERVER['DOCUMENT_ROOT'] para obtener la raíz del servidor web
+// y concatenamos con $base_upload_path para obtener la ruta física completa.
+$upload_dir =  '../' . $base_upload_path;
+
 if (!is_dir($upload_dir)) {
     mkdir($upload_dir, 0777, true); // Crea el directorio si no existe
 }
 
 // Función para manejar la subida de archivos (reutilizada)
-function handle_upload($file_input_name, $current_path, $upload_dir, $allowed_ext = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'pdf', 'doc', 'docx', 'txt']) {
+function handle_upload($file_input_name, $current_path, $upload_dir_physical, $base_upload_path_relative, $allowed_ext = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'pdf', 'doc', 'docx', 'txt']) {
     if (isset($_FILES[$file_input_name]) && $_FILES[$file_input_name]['error'] === UPLOAD_ERR_OK) {
         $file_tmp_name = $_FILES[$file_input_name]['tmp_name'];
         $file_name = basename($_FILES[$file_input_name]['name']);
@@ -27,14 +34,18 @@ function handle_upload($file_input_name, $current_path, $upload_dir, $allowed_ex
 
         if (in_array($file_ext, $allowed_ext)) {
             $unique_name = uniqid() . '.' . $file_ext;
-            $destination = $upload_dir . $unique_name;
+            // La ruta de destino física para mover el archivo
+            $destination_physical = $upload_dir_physical . $unique_name;
+            // La ruta que se guardará en la base de datos (sin ../)
+            $destination_db = $base_upload_path_relative . $unique_name;
 
-            if (move_uploaded_file($file_tmp_name, $destination)) {
-                // Eliminar archivo antiguo si existe y no es el mismo
-                if ($current_path && file_exists($current_path) && $current_path !== $destination) {
-                    unlink($current_path);
+            if (move_uploaded_file($file_tmp_name, $destination_physical)) {
+                // Eliminar archivo antiguo si existe y no es el mismo.
+                // Es importante reconstruir la ruta física del archivo antiguo para poder eliminarlo.
+                if ($current_path && file_exists('../' . $current_path) && '../' . $current_path !== $destination_physical) {
+                    unlink('../' . $current_path);
                 }
-                return $destination;
+                return $destination_db; // Retorna la ruta relativa al directorio raíz del sitio web
             } else {
                 return false; // Error al mover el archivo
             }
@@ -42,7 +53,7 @@ function handle_upload($file_input_name, $current_path, $upload_dir, $allowed_ex
             return false; // Extensión de archivo no permitida
         }
     }
-    return $current_path; // No se subió un nuevo archivo, mantener el existente
+    return $current_path; // No se subió un nuevo archivo, mantener el existente (que ya está en formato DB)
 }
 
 
@@ -71,9 +82,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $logo_unge_path = $existing_data['logo_unge'] ?? null;
                 $logo_pais_path = $existing_data['logo_pais'] ?? null;
 
-                $imagen_path = handle_upload('imagen', $imagen_path, $upload_dir, ['jpg', 'jpeg', 'png', 'gif', 'svg']);
-                $logo_unge_path = handle_upload('logo_unge', $logo_unge_path, $upload_dir, ['jpg', 'jpeg', 'png', 'gif', 'svg']);
-                $logo_pais_path = handle_upload('logo_pais', $logo_pais_path, $upload_dir, ['jpg', 'jpeg', 'png', 'gif', 'svg']);
+                // Llama a handle_upload pasando el directorio físico y la ruta relativa para la DB
+                $imagen_path = handle_upload('imagen', $imagen_path, $upload_dir, $base_upload_path, ['jpg', 'jpeg', 'png', 'webp','gif', 'svg']);
+                $logo_unge_path = handle_upload('logo_unge', $logo_unge_path, $upload_dir, $base_upload_path, ['jpg', 'jpeg', 'png','webp', 'gif', 'svg']);
+                $logo_pais_path = handle_upload('logo_pais', $logo_pais_path, $upload_dir, $base_upload_path, ['jpg', 'jpeg', 'png','webp', 'gif', 'svg']);
 
                 if ($imagen_path === false || $logo_unge_path === false || $logo_pais_path === false) {
                     throw new Exception('Error al subir una o más imágenes. Asegúrate de que son archivos de imagen válidos (JPG, PNG, GIF, SVG) y que el directorio de subida tiene permisos.');
@@ -127,8 +139,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $imagen_publicacion_path = $current_publicacion_data['imagen'] ?? null;
                 $archivo_adjunto_path = $current_publicacion_data['archivo_adjunto'] ?? null;
 
-                $imagen_publicacion_path = handle_upload('imagen_publicacion', $imagen_publicacion_path, $upload_dir, ['jpg', 'jpeg', 'png', 'gif', 'svg']);
-                $archivo_adjunto_path = handle_upload('archivo_adjunto', $archivo_adjunto_path, $upload_dir, ['pdf', 'doc', 'docx', 'txt']);
+                // Llama a handle_upload con las rutas adecuadas
+                $imagen_publicacion_path = handle_upload('imagen_publicacion', $imagen_publicacion_path, $upload_dir, $base_upload_path, ['jpg', 'jpeg', 'png', 'gif', 'svg']);
+                $archivo_adjunto_path = handle_upload('archivo_adjunto', $archivo_adjunto_path, $upload_dir, $base_upload_path, ['pdf', 'doc', 'docx', 'txt']);
 
                 if ($imagen_publicacion_path === false || $archivo_adjunto_path === false) {
                     throw new Exception('Error al subir archivos de la publicación. Verifica formatos y permisos.');
@@ -156,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $id_publicacion = filter_var($_POST['id_publicacion'] ?? null, FILTER_VALIDATE_INT);
                 if (!$id_publicacion) throw new Exception("ID de publicación no válido para eliminación.");
 
-                // Obtener rutas de archivos para eliminarlos
+                // Obtener rutas de archivos para eliminarlos (ya están en formato de DB, hay que hacerlas físicas)
                 $stmt_files = $pdo->prepare("SELECT imagen, archivo_adjunto FROM publicaciones WHERE id_publicacion = :id_publicacion");
                 $stmt_files->execute([':id_publicacion' => $id_publicacion]);
                 $files_to_delete = $stmt_files->fetch(PDO::FETCH_ASSOC);
@@ -166,8 +179,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($stmt->rowCount() > 0) {
                     // Eliminar archivos físicos si existen
-                    if ($files_to_delete['imagen'] && file_exists($files_to_delete['imagen'])) unlink($files_to_delete['imagen']);
-                    if ($files_to_delete['archivo_adjunto'] && file_exists($files_to_delete['archivo_adjunto'])) unlink($files_to_delete['archivo_adjunto']);
+                    if ($files_to_delete['imagen'] && file_exists('../' . $files_to_delete['imagen'])) unlink('../' . $files_to_delete['imagen']);
+                    if ($files_to_delete['archivo_adjunto'] && file_exists('../' . $files_to_delete['archivo_adjunto'])) unlink('../' . $files_to_delete['archivo_adjunto']);
                     set_flash_message('success', 'Publicación eliminada correctamente.');
                 } else {
                     set_flash_message('danger', 'Error al eliminar la publicación o no se encontró.');
@@ -193,7 +206,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $archivo_modelo_path = $current_requisito_data['archivo_modelo'] ?? null;
 
-                $archivo_modelo_path = handle_upload('archivo_modelo', $archivo_modelo_path, $upload_dir, ['pdf', 'doc', 'docx', 'txt']);
+                // Llama a handle_upload con las rutas adecuadas
+                $archivo_modelo_path = handle_upload('archivo_modelo', $archivo_modelo_path, $upload_dir, $base_upload_path, ['pdf', 'doc', 'docx', 'txt']);
 
                 if ($archivo_modelo_path === false) {
                     throw new Exception('Error al subir el archivo modelo. Verifica formato y permisos.');
@@ -220,7 +234,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $id_requisito = filter_var($_POST['id_requisito'] ?? null, FILTER_VALIDATE_INT);
                 if (!$id_requisito) throw new Exception("ID de requisito no válido para eliminación.");
 
-                // Obtener ruta de archivo para eliminarlo
+                // Obtener ruta de archivo para eliminarlo (ya está en formato de DB, hay que hacerla física)
                 $stmt_file = $pdo->prepare("SELECT archivo_modelo FROM requisitos_matricula WHERE id_requisito = :id_requisito");
                 $stmt_file->execute([':id_requisito' => $id_requisito]);
                 $file_to_delete = $stmt_file->fetchColumn();
@@ -230,7 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($stmt->rowCount() > 0) {
                     // Eliminar archivo físico si existe
-                    if ($file_to_delete && file_exists($file_to_delete)) unlink($file_to_delete);
+                    if ($file_to_delete && file_exists('../' . $file_to_delete)) unlink('../' . $file_to_delete);
                     set_flash_message('success', 'Requisito de matrícula eliminado correctamente.');
                 } else {
                     set_flash_message('danger', 'Error al eliminar el requisito o no se encontró.');
@@ -306,7 +320,6 @@ $flash_messages = get_flash_messages();
 
 <?php include '../includes/header.php'; ?>
 
- 
             <h1 class="mt-4">Módulo de Configuración</h1>
             <p class="lead">Gestiona la información general, publicaciones y requisitos de matrícula del departamento.</p>
 
@@ -325,7 +338,6 @@ $flash_messages = get_flash_messages();
                 </div>
             <?php endif; ?>
 
-            <!-- Pestañas de Navegación -->
             <ul class="nav nav-tabs mb-4" id="configTabs" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link <?php echo ($active_tab == 'departamento') ? 'active' : ''; ?>" id="departamento-tab" data-bs-toggle="tab" data-bs-target="#departamento" type="button" role="tab" aria-controls="departamento" aria-selected="<?php echo ($active_tab == 'departamento') ? 'true' : 'false'; ?>">
@@ -344,9 +356,7 @@ $flash_messages = get_flash_messages();
                 </li>
             </ul>
 
-            <!-- Contenido de las Pestañas -->
             <div class="tab-content" id="configTabsContent">
-                <!-- Pestaña: Información del Departamento -->
                 <div class="tab-pane fade <?php echo ($active_tab == 'departamento') ? 'show active' : ''; ?>" id="departamento" role="tabpanel" aria-labelledby="departamento-tab">
                     <div class="card shadow-sm mb-4">
                         <div class="card-header bg-primary text-white">
@@ -362,9 +372,9 @@ $flash_messages = get_flash_messages();
                                 <dt class="col-sm-3">Dirección:</dt><dd class="col-sm-9"><?php echo htmlspecialchars($departamento_data['direccion'] ?? 'N/A'); ?></dd>
                                 <dt class="col-sm-3">Teléfono:</dt><dd class="col-sm-9"><?php echo htmlspecialchars($departamento_data['telefono'] ?? 'N/A'); ?></dd>
                                 <dt class="col-sm-3">Horario:</dt><dd class="col-sm-9"><?php echo htmlspecialchars($departamento_data['horario'] ?? 'N/A'); ?></dd>
-                                <dt class="col-sm-3">Imagen Principal:</dt><dd class="col-sm-9"><?php echo !empty($departamento_data['imagen']) ? '<img src="' . htmlspecialchars($departamento_data['imagen']) . '" class="img-thumbnail" style="max-width: 100px;">' : 'N/A'; ?></dd>
-                                <dt class="col-sm-3">Logo UNGE:</dt><dd class="col-sm-9"><?php echo !empty($departamento_data['logo_unge']) ? '<img src="' . htmlspecialchars($departamento_data['logo_unge']) . '" class="img-thumbnail" style="max-width: 80px;">' : 'N/A'; ?></dd>
-                                <dt class="col-sm-3">Logo País:</dt><dd class="col-sm-9"><?php echo !empty($departamento_data['logo_pais']) ? '<img src="' . htmlspecialchars($departamento_data['logo_pais']) . '" class="img-thumbnail" style="max-width: 80px;">' : 'N/A'; ?></dd>
+                                <dt class="col-sm-3">Imagen Principal:</dt><dd class="col-sm-9"><?php echo !empty($departamento_data['imagen']) ? '<img src="../' . htmlspecialchars($departamento_data['imagen']) . '" class="img-thumbnail" style="max-width: 100px;">' : 'N/A'; ?></dd>
+                                <dt class="col-sm-3">Logo UNGE:</dt><dd class="col-sm-9"><?php echo !empty($departamento_data['logo_unge']) ? '<img src="../' . htmlspecialchars($departamento_data['logo_unge']) . '" class="img-thumbnail" style="max-width: 80px;">' : 'N/A'; ?></dd>
+                                <dt class="col-sm-3">Logo País:</dt><dd class="col-sm-9"><?php echo !empty($departamento_data['logo_pais']) ? '<img src="../' . htmlspecialchars($departamento_data['logo_pais']) . '" class="img-thumbnail" style="max-width: 80px;">' : 'N/A'; ?></dd>
                             </dl>
                             <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#departamentoModal" id="editDepartamentoBtn"
                                 data-nombre="<?php echo htmlspecialchars($departamento_data['nombre']); ?>"
@@ -383,7 +393,6 @@ $flash_messages = get_flash_messages();
                     </div>
                 </div>
 
-                <!-- Pestaña: Gestión de Publicaciones -->
                 <div class="tab-pane fade <?php echo ($active_tab == 'publicaciones') ? 'show active' : ''; ?>" id="publicaciones" role="tabpanel" aria-labelledby="publicaciones-tab">
                     <div class="card shadow-sm mb-4">
                         <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
@@ -455,7 +464,6 @@ $flash_messages = get_flash_messages();
                     </div>
                 </div>
 
-                <!-- Pestaña: Gestión de Requisitos de Matrícula -->
                 <div class="tab-pane fade <?php echo ($active_tab == 'requisitos') ? 'show active' : ''; ?>" id="requisitos" role="tabpanel" aria-labelledby="requisitos-tab">
                     <div class="card shadow-sm mb-4">
                         <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
@@ -507,8 +515,8 @@ $flash_messages = get_flash_messages();
                                                     </td>
                                                     <td>
                                                         <?php if (!empty($req['archivo_modelo'])): ?>
-                                                            <a href="<?php echo htmlspecialchars($req['archivo_modelo']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                                <i class="fas fa-download me-1"></i> Descargar
+                                                            <a href="<?php echo htmlspecialchars($req['archivo_modelo']); ?>" target="_blank" class="btn btn-sm btn-outline-primary" title="Ver archivo">
+                                                                <i class="fas fa-file-alt"></i> Ver
                                                             </a>
                                                         <?php else: ?>
                                                             N/A
@@ -537,200 +545,197 @@ $flash_messages = get_flash_messages();
                         </div>
                     </div>
                 </div>
-            </div> <!-- Fin tab-content -->
- 
+            </div>
 
-<!-- Modal para Configuración del Departamento -->
 <div class="modal fade" id="departamentoModal" tabindex="-1" aria-labelledby="departamentoModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="departamentoModalLabel">Editar Información del Departamento</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
             <form action="configuracion.php" method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="action" value="update_departamento">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="departamentoModalLabel">Editar Información del Departamento</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
                 <div class="modal-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="modal_departamento_nombre" class="form-label">Nombre del Departamento:</label>
-                            <input type="text" class="form-control" id="modal_departamento_nombre" name="nombre" required>
+                    <input type="hidden" name="action" value="update_departamento">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="nombre" class="form-label">Nombre del Departamento</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" required>
                         </div>
-                        <div class="col-md-6">
-                            <label for="modal_departamento_universidad" class="form-label">Universidad:</label>
-                            <input type="text" class="form-control" id="modal_departamento_universidad" name="universidad" required>
+                        <div class="col-md-6 mb-3">
+                            <label for="universidad" class="form-label">Nombre de la Universidad</label>
+                            <input type="text" class="form-control" id="universidad" name="universidad" required>
                         </div>
                     </div>
-
                     <div class="mb-3">
-                        <label for="modal_departamento_historia" class="form-label">Historia:</label>
-                        <textarea class="form-control" id="modal_departamento_historia" name="historia" rows="5"></textarea>
+                        <label for="historia" class="form-label">Historia</label>
+                        <textarea class="form-control" id="historia" name="historia" rows="5"></textarea>
                     </div>
-
                     <div class="mb-3">
-                        <label for="modal_departamento_info_matricula" class="form-label">Información de Matrícula:</label>
-                        <textarea class="form-control" id="modal_departamento_info_matricula" name="info_matricula" rows="5"></textarea>
+                        <label for="info_matricula" class="form-label">Información de Matrícula</label>
+                        <textarea class="form-control" id="info_matricula" name="info_matricula" rows="5"></textarea>
                     </div>
-
-                    <div class="row mb-3">
-                        <div class="col-md-4">
-                            <label for="modal_departamento_direccion" class="form-label">Dirección:</label>
-                            <input type="text" class="form-control" id="modal_departamento_direccion" name="direccion">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="direccion" class="form-label">Dirección</label>
+                            <input type="text" class="form-control" id="direccion" name="direccion">
                         </div>
-                        <div class="col-md-4">
-                            <label for="modal_departamento_telefono" class="form-label">Teléfono:</label>
-                            <input type="text" class="form-control" id="modal_departamento_telefono" name="telefono">
+                        <div class="col-md-4 mb-3">
+                            <label for="telefono" class="form-label">Teléfono</label>
+                            <input type="text" class="form-control" id="telefono" name="telefono">
                         </div>
-                        <div class="col-md-4">
-                            <label for="modal_departamento_horario" class="form-label">Horario de Atención:</label>
-                            <input type="text" class="form-control" id="modal_departamento_horario" name="horario">
+                        <div class="col-md-4 mb-3">
+                            <label for="horario" class="form-label">Horario de Atención</label>
+                            <input type="text" class="form-control" id="horario" name="horario">
                         </div>
                     </div>
-
-                    <hr class="my-4">
-                    <h5>Imágenes y Logos</h5>
-
-                    <div class="row mb-3">
-                        <div class="col-md-4">
-                            <label for="modal_departamento_imagen" class="form-label">Imagen Principal:</label>
-                            <input type="file" class="form-control" id="modal_departamento_imagen" name="imagen" accept="image/*">
-                            <div class="mt-2" id="current_imagen_display"></div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="imagen" class="form-label">Imagen Principal</label>
+                            <input type="file" class="form-control" id="imagen" name="imagen" accept="image/*">
+                            <small class="form-text text-muted">Imagen actual: <span id="current_imagen"></span></small>
+                            <div id="imagen_preview" class="mt-2"></div>
                         </div>
-                        <div class="col-md-4">
-                            <label for="modal_departamento_logo_unge" class="form-label">Logo UNGE:</label>
-                            <input type="file" class="form-control" id="modal_departamento_logo_unge" name="logo_unge" accept="image/*">
-                            <div class="mt-2" id="current_logo_unge_display"></div>
+                        <div class="col-md-4 mb-3">
+                            <label for="logo_unge" class="form-label">Logo UNGE</label>
+                            <input type="file" class="form-control" id="logo_unge" name="logo_unge" accept="image/*">
+                            <small class="form-text text-muted">Logo actual: <span id="current_logo_unge"></span></small>
+                            <div id="logo_unge_preview" class="mt-2"></div>
                         </div>
-                        <div class="col-md-4">
-                            <label for="modal_departamento_logo_pais" class="form-label">Logo País:</label>
-                            <input type="file" class="form-control" id="modal_departamento_logo_pais" name="logo_pais" accept="image/*">
-                            <div class="mt-2" id="current_logo_pais_display"></div>
+                        <div class="col-md-4 mb-3">
+                            <label for="logo_pais" class="form-label">Logo País</label>
+                            <input type="file" class="form-control" id="logo_pais" name="logo_pais" accept="image/*">
+                            <small class="form-text text-muted">Logo actual: <span id="current_logo_pais"></span></small>
+                            <div id="logo_pais_preview" class="mt-2"></div>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i> Cerrar</button>
-                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i> Guardar Cambios</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Modal para Publicaciones -->
 <div class="modal fade" id="publicacionModal" tabindex="-1" aria-labelledby="publicacionModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form action="configuracion.php" method="POST" enctype="multipart/form-data" id="publicacionForm">
-                <input type="hidden" name="id_publicacion" id="modal_publicacion_id">
-                <input type="hidden" name="action" id="modal_publicacion_action" value="add_publicacion">
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title" id="publicacionModalLabel">Nueva Publicación</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="publicacionModalLabel">Nueva Publicación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="configuracion.php" method="POST" enctype="multipart/form-data">
                 <div class="modal-body">
+                    <input type="hidden" name="action" id="publicacion_action" value="add_publicacion">
+                    <input type="hidden" name="id_publicacion" id="publicacion_id">
                     <div class="mb-3">
-                        <label for="modal_publicacion_titulo" class="form-label">Título:</label>
-                        <input type="text" class="form-control" id="modal_publicacion_titulo" name="titulo" required>
+                        <label for="titulo" class="form-label">Título</label>
+                        <input type="text" class="form-control" id="publicacion_titulo" name="titulo" required>
                     </div>
                     <div class="mb-3">
-                        <label for="modal_publicacion_contenido" class="form-label">Contenido:</label>
-                        <textarea class="form-control" id="modal_publicacion_contenido" name="contenido" rows="5" required></textarea>
+                        <label for="contenido" class="form-label">Contenido</label>
+                        <textarea class="form-control" id="publicacion_contenido" name="contenido" rows="6" required></textarea>
                     </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="modal_publicacion_tipo" class="form-label">Tipo:</label>
-                            <select class="form-select" id="modal_publicacion_tipo" name="tipo" required>
-                                <option value="noticia">Noticia</option>
-                                <option value="evento">Evento</option>
-                                <option value="comunicado">Comunicado</option>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="tipo" class="form-label">Tipo de Publicación</label>
+                            <select class="form-select" id="publicacion_tipo" name="tipo" required>
+                                <option value="">Seleccione...</option>
+                                <option value="Noticia">Noticia</option>
+                                <option value="Evento">Evento</option>
+                                <option value="Comunicado">Comunicado</option>
                             </select>
                         </div>
-                        <div class="col-md-6">
-                            <label for="modal_publicacion_fecha_evento" class="form-label">Fecha del Evento (si aplica):</label>
-                            <input type="date" class="form-control" id="modal_publicacion_fecha_evento" name="fecha_evento">
+                        <div class="col-md-6 mb-3">
+                            <label for="fecha_evento" class="form-label">Fecha del Evento (si aplica)</label>
+                            <input type="date" class="form-control" id="publicacion_fecha_evento" name="fecha_evento">
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label for="modal_publicacion_imagen" class="form-label">Imagen:</label>
-                        <input type="file" class="form-control" id="modal_publicacion_imagen" name="imagen_publicacion" accept="image/*">
-                        <div class="mt-2" id="current_publicacion_imagen_display"></div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="imagen_publicacion" class="form-label">Imagen</label>
+                            <input type="file" class="form-control" id="imagen_publicacion" name="imagen_publicacion" accept="image/*">
+                            <small class="form-text text-muted">Imagen actual: <span id="current_imagen_publicacion"></span></small>
+                            <div id="imagen_publicacion_preview" class="mt-2"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="archivo_adjunto" class="form-label">Archivo Adjunto (PDF, DOC, TXT)</label>
+                            <input type="file" class="form-control" id="archivo_adjunto" name="archivo_adjunto" accept=".pdf,.doc,.docx,.txt">
+                            <small class="form-text text-muted">Archivo actual: <span id="current_archivo_adjunto"></span></small>
+                            <div id="archivo_adjunto_preview" class="mt-2"></div>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label for="modal_publicacion_archivo_adjunto" class="form-label">Archivo Adjunto:</label>
-                        <input type="file" class="form-control" id="modal_publicacion_archivo_adjunto" name="archivo_adjunto" accept=".pdf,.doc,.docx,.txt">
-                        <div class="mt-2" id="current_publicacion_adjunto_display"></div>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="1" id="modal_publicacion_visible" name="visible" checked>
-                        <label class="form-check-label" for="modal_publicacion_visible">
-                            Visible
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="1" id="publicacion_visible" name="visible">
+                        <label class="form-check-label" for="publicacion_visible">
+                            Visible en el portal público
                         </label>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i> Cerrar</button>
-                    <button type="submit" class="btn btn-success" id="publicacionSaveBtn"><i class="fas fa-save me-2"></i> Guardar Publicación</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn btn-success" id="submitPublicacionBtn">Guardar Publicación</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Modal para Requisitos de Matrícula -->
 <div class="modal fade" id="requisitoModal" tabindex="-1" aria-labelledby="requisitoModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form action="configuracion.php" method="POST" enctype="multipart/form-data" id="requisitoForm">
-                <input type="hidden" name="id_requisito" id="modal_requisito_id">
-                <input type="hidden" name="action" id="modal_requisito_action" value="add_requisito">
-                <div class="modal-header bg-info text-white">
-                    <h5 class="modal-title" id="requisitoModalLabel">Nuevo Requisito de Matrícula</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="requisitoModalLabel">Nuevo Requisito de Matrícula</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="configuracion.php" method="POST" enctype="multipart/form-data">
                 <div class="modal-body">
+                    <input type="hidden" name="action" id="requisito_action" value="add_requisito">
+                    <input type="hidden" name="id_requisito" id="requisito_id">
                     <div class="mb-3">
-                        <label for="modal_requisito_titulo" class="form-label">Título:</label>
-                        <input type="text" class="form-control" id="modal_requisito_titulo" name="titulo" required>
+                        <label for="requisito_titulo" class="form-label">Título del Requisito</label>
+                        <input type="text" class="form-control" id="requisito_titulo" name="titulo" required>
                     </div>
                     <div class="mb-3">
-                        <label for="modal_requisito_descripcion" class="form-label">Descripción:</label>
-                        <textarea class="form-control" id="modal_requisito_descripcion" name="descripcion" rows="5" required></textarea>
+                        <label for="requisito_descripcion" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="requisito_descripcion" name="descripcion" rows="4"></textarea>
                     </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="modal_requisito_tipo" class="form-label">Tipo:</label>
-                            <select class="form-select" id="modal_requisito_tipo" name="tipo" required>
-                                <option value="nuevo">Nuevo Ingreso</option>
-                                <option value="antiguo">Antiguo Ingreso</option>
-                                <option value="extranjero">Extranjero</option>
-                                <option value="otro">Otro</option>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="requisito_tipo" class="form-label">Tipo de Requisito</label>
+                            <select class="form-select" id="requisito_tipo" name="tipo" required>
+                                <option value="">Seleccione...</option>
+                                <option value="Documento">Documento</option>
+                                <option value="Pago">Pago</option>
+                                <option value="Examen">Examen</option>
+                                <option value="Otro">Otro</option>
                             </select>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-check mt-4">
-                                <input class="form-check-input" type="checkbox" value="1" id="modal_requisito_obligatorio" name="obligatorio" checked>
-                                <label class="form-check-label" for="modal_requisito_obligatorio">
-                                    Obligatorio
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="1" id="modal_requisito_visible" name="visible" checked>
-                                <label class="form-check-label" for="modal_requisito_visible">
-                                    Visible
-                                </label>
-                            </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="archivo_modelo" class="form-label">Archivo Modelo (PDF, DOC, TXT)</label>
+                            <input type="file" class="form-control" id="requisito_archivo_modelo" name="archivo_modelo" accept=".pdf,.doc,.docx,.txt">
+                            <small class="form-text text-muted">Archivo actual: <span id="current_requisito_archivo_modelo"></span></small>
+                            <div id="requisito_archivo_modelo_preview" class="mt-2"></div>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label for="modal_requisito_archivo_modelo" class="form-label">Archivo Modelo (PDF, DOC, TXT):</label>
-                        <input type="file" class="form-control" id="modal_requisito_archivo_modelo" name="archivo_modelo" accept=".pdf,.doc,.docx,.txt">
-                        <div class="mt-2" id="current_requisito_archivo_display"></div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="1" id="requisito_obligatorio" name="obligatorio">
+                        <label class="form-check-label" for="requisito_obligatorio">
+                            Es obligatorio
+                        </label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="1" id="requisito_visible" name="visible">
+                        <label class="form-check-label" for="requisito_visible">
+                            Visible en el portal público
+                        </label>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i> Cerrar</button>
-                    <button type="submit" class="btn btn-info" id="requisitoSaveBtn"><i class="fas fa-save me-2"></i> Guardar Requisito</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn btn-info" id="submitRequisitoBtn">Guardar Requisito</button>
                 </div>
             </form>
         </div>
@@ -740,175 +745,163 @@ $flash_messages = get_flash_messages();
 <?php include '../includes/footer.php'; ?>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Función para mostrar toasts
-        function showToast(message, type) {
-            const toastContainer = document.querySelector('.toast-container');
-            const toastHtml = `
-                <div class="toast align-items-center text-white bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
-                    <div class="d-flex">
-                        <div class="toast-body">
-                            ${message}
-                        </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                    </div>
-                </div>
-            `;
-            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-            const toastEl = toastContainer.lastElementChild;
-            const toast = new bootstrap.Toast(toastEl);
-            toast.show();
-        }
-
-        // Mostrar mensajes flash al cargar la página
-        const flashMessages = <?php echo json_encode($flash_messages); ?>;
-        flashMessages.forEach(msg => {
-            showToast(msg.message, msg.type);
-        });
-
-        // --- Lógica para el Modal de Departamento ---
-        const departamentoModal = document.getElementById('departamentoModal');
-        departamentoModal.addEventListener('show.bs.modal', function() {
-            // Rellenar el formulario con los datos actuales del departamento
-            document.getElementById('modal_departamento_nombre').value = document.getElementById('editDepartamentoBtn').dataset.nombre;
-            document.getElementById('modal_departamento_universidad').value = document.getElementById('editDepartamentoBtn').dataset.universidad;
-            document.getElementById('modal_departamento_historia').value = document.getElementById('editDepartamentoBtn').dataset.historia;
-            document.getElementById('modal_departamento_info_matricula').value = document.getElementById('editDepartamentoBtn').dataset.info_matricula;
-            document.getElementById('modal_departamento_direccion').value = document.getElementById('editDepartamentoBtn').dataset.direccion;
-            document.getElementById('modal_departamento_telefono').value = document.getElementById('editDepartamentoBtn').dataset.telefono;
-            document.getElementById('modal_departamento_horario').value = document.getElementById('editDepartamentoBtn').dataset.horario;
-
-            // Mostrar imágenes actuales
-            const currentImagen = document.getElementById('editDepartamentoBtn').dataset.imagen;
-            const currentLogoUnge = document.getElementById('editDepartamentoBtn').dataset.logo_unge;
-            const currentLogoPais = document.getElementById('editDepartamentoBtn').dataset.logo_pais;
-
-            document.getElementById('current_imagen_display').innerHTML = currentImagen ? `<img src="${currentImagen}" class="img-thumbnail" style="max-width: 150px;"><small class="d-block text-muted">Actual</small>` : 'No hay imagen actual.';
-            document.getElementById('current_logo_unge_display').innerHTML = currentLogoUnge ? `<img src="${currentLogoUnge}" class="img-thumbnail" style="max-width: 100px;"><small class="d-block text-muted">Actual</small>` : 'No hay logo UNGE actual.';
-            document.getElementById('current_logo_pais_display').innerHTML = currentLogoPais ? `<img src="${currentLogoPais}" class="img-thumbnail" style="max-width: 100px;"><small class="d-block text-muted">Actual</small>` : 'No hay logo País actual.';
-        });
-
-        // --- Lógica para el Modal de Publicaciones ---
-        const publicacionModal = document.getElementById('publicacionModal');
-        const publicacionForm = document.getElementById('publicacionForm');
-        const publicacionModalLabel = document.getElementById('publicacionModalLabel');
-        const publicacionSaveBtn = document.getElementById('publicacionSaveBtn');
-        const modalPublicacionId = document.getElementById('modal_publicacion_id');
-        const modalPublicacionAction = document.getElementById('modal_publicacion_action');
-        const modalPublicacionTitulo = document.getElementById('modal_publicacion_titulo');
-        const modalPublicacionContenido = document.getElementById('modal_publicacion_contenido');
-        const modalPublicacionTipo = document.getElementById('modal_publicacion_tipo');
-        const modalPublicacionFechaEvento = document.getElementById('modal_publicacion_fecha_evento');
-        const modalPublicacionVisible = document.getElementById('modal_publicacion_visible');
-        const currentPublicacionImagenDisplay = document.getElementById('current_publicacion_imagen_display');
-        const currentPublicacionAdjuntoDisplay = document.getElementById('current_publicacion_adjunto_display');
-        const modalPublicacionImagenInput = document.getElementById('modal_publicacion_imagen');
-        const modalPublicacionArchivoAdjuntoInput = document.getElementById('modal_publicacion_archivo_adjunto');
-
-
-        document.getElementById('addNewPublicacionBtn').addEventListener('click', function() {
-            publicacionForm.reset();
-            modalPublicacionId.value = '';
-            modalPublicacionAction.value = 'add_publicacion';
-            publicacionModalLabel.innerText = 'Nueva Publicación';
-            publicacionSaveBtn.innerText = 'Guardar Publicación';
-            publicacionSaveBtn.classList.remove('btn-warning');
-            publicacionSaveBtn.classList.add('btn-success');
-            modalPublicacionVisible.checked = true; // Por defecto visible
-            currentPublicacionImagenDisplay.innerHTML = '';
-            currentPublicacionAdjuntoDisplay.innerHTML = '';
-            modalPublicacionImagenInput.required = false; // No requerido al añadir
-            modalPublicacionArchivoAdjuntoInput.required = false; // No requerido al añadir
-        });
-
-        document.querySelectorAll('.edit-publicacion-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                const row = this.closest('tr');
-                modalPublicacionId.value = row.dataset.id_publicacion;
-                modalPublicacionAction.value = 'edit_publicacion';
-                publicacionModalLabel.innerText = 'Editar Publicación';
-                publicacionSaveBtn.innerText = 'Actualizar Publicación';
-                publicacionSaveBtn.classList.remove('btn-success');
-                publicacionSaveBtn.classList.add('btn-warning');
-
-                modalPublicacionTitulo.value = row.dataset.titulo;
-                modalPublicacionContenido.value = row.dataset.contenido;
-                modalPublicacionTipo.value = row.dataset.tipo;
-                modalPublicacionFechaEvento.value = row.dataset.fecha_evento;
-                modalPublicacionVisible.checked = (row.dataset.visible === '1');
-
-                const currentImagen = row.dataset.imagen;
-                const currentAdjunto = row.dataset.archivo_adjunto;
-
-                currentPublicacionImagenDisplay.innerHTML = currentImagen ? `<img src="${currentImagen}" class="img-thumbnail" style="max-width: 100px;"><small class="d-block text-muted">Actual</small>` : 'No hay imagen actual.';
-                currentPublicacionAdjuntoDisplay.innerHTML = currentAdjunto ? `<a href="${currentAdjunto}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-download me-1"></i> Descargar actual</a><small class="d-block text-muted">Actual</small>` : 'No hay archivo adjunto actual.';
-                
-                modalPublicacionImagenInput.required = false; // No requerido al editar
-                modalPublicacionArchivoAdjuntoInput.required = false; // No requerido al editar
-            });
-        });
-
-        // --- Lógica para el Modal de Requisitos de Matrícula ---
-        const requisitoModal = document.getElementById('requisitoModal');
-        const requisitoForm = document.getElementById('requisitoForm');
-        const requisitoModalLabel = document.getElementById('requisitoModalLabel');
-        const requisitoSaveBtn = document.getElementById('requisitoSaveBtn');
-        const modalRequisitoId = document.getElementById('modal_requisito_id');
-        const modalRequisitoAction = document.getElementById('modal_requisito_action');
-        const modalRequisitoTitulo = document.getElementById('modal_requisito_titulo');
-        const modalRequisitoDescripcion = document.getElementById('modal_requisito_descripcion');
-        const modalRequisitoTipo = document.getElementById('modal_requisito_tipo');
-        const modalRequisitoObligatorio = document.getElementById('modal_requisito_obligatorio');
-        const modalRequisitoVisible = document.getElementById('modal_requisito_visible');
-        const currentRequisitoArchivoDisplay = document.getElementById('current_requisito_archivo_display');
-        const modalRequisitoArchivoModeloInput = document.getElementById('modal_requisito_archivo_modelo');
-
-        document.getElementById('addNewRequisitoBtn').addEventListener('click', function() {
-            requisitoForm.reset();
-            modalRequisitoId.value = '';
-            modalRequisitoAction.value = 'add_requisito';
-            requisitoModalLabel.innerText = 'Nuevo Requisito de Matrícula';
-            requisitoSaveBtn.innerText = 'Guardar Requisito';
-            requisitoSaveBtn.classList.remove('btn-warning');
-            requisitoSaveBtn.classList.add('btn-info');
-            modalRequisitoObligatorio.checked = true; // Por defecto obligatorio
-            modalRequisitoVisible.checked = true; // Por defecto visible
-            currentRequisitoArchivoDisplay.innerHTML = '';
-            modalRequisitoArchivoModeloInput.required = false; // No requerido al añadir
-        });
-
-        document.querySelectorAll('.edit-requisito-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                const row = this.closest('tr');
-                modalRequisitoId.value = row.dataset.id_requisito;
-                modalRequisitoAction.value = 'edit_requisito';
-                requisitoModalLabel.innerText = 'Editar Requisito de Matrícula';
-                requisitoSaveBtn.innerText = 'Actualizar Requisito';
-                requisitoSaveBtn.classList.remove('btn-info');
-                requisitoSaveBtn.classList.add('btn-warning');
-
-                modalRequisitoTitulo.value = row.dataset.titulo;
-                modalRequisitoDescripcion.value = row.dataset.descripcion;
-                modalRequisitoTipo.value = row.dataset.tipo;
-                modalRequisitoObligatorio.checked = (row.dataset.obligatorio === '1');
-                modalRequisitoVisible.checked = (row.dataset.visible === '1');
-
-                const currentArchivo = row.dataset.archivo_modelo;
-                currentRequisitoArchivoDisplay.innerHTML = currentArchivo ? `<a href="${currentArchivo}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-download me-1"></i> Descargar actual</a><small class="d-block text-muted">Actual</small>` : 'No hay archivo modelo actual.';
-                
-                modalRequisitoArchivoModeloInput.required = false; // No requerido al editar
-            });
-        });
-
-        // Lógica para activar la pestaña correcta al cargar la página
-        const urlParams = new URLSearchParams(window.location.search);
-        const activeTabFromUrl = urlParams.get('tab');
-        if (activeTabFromUrl) {
-            const tabButton = document.getElementById(`${activeTabFromUrl}-tab`);
-            if (tabButton) {
-                const bsTab = new bootstrap.Tab(tabButton);
-                bsTab.show();
-            }
-        }
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar los toasts de Bootstrap
+    var toastElList = [].slice.call(document.querySelectorAll('.toast'))
+    var toastList = toastElList.map(function(toastEl) {
+        return new bootstrap.Toast(toastEl, { delay: 5000 })
     });
+    toastList.forEach(toast => toast.show());
+
+    // Script para la pestaña de Departamento
+    const departamentoModal = document.getElementById('departamentoModal');
+    if (departamentoModal) {
+        departamentoModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget; // Botón que activó el modal
+            if (button.id === 'editDepartamentoBtn') {
+                const nombre = button.getAttribute('data-nombre');
+                const universidad = button.getAttribute('data-universidad');
+                const historia = button.getAttribute('data-historia');
+                const info_matricula = button.getAttribute('data-info_matricula');
+                const direccion = button.getAttribute('data-direccion');
+                const telefono = button.getAttribute('data-telefono');
+                const horario = button.getAttribute('data-horario');
+                const imagen = button.getAttribute('data-imagen');
+                const logo_unge = button.getAttribute('data-logo_unge');
+                const logo_pais = button.getAttribute('data-logo_pais');
+
+                document.getElementById('departamentoModalLabel').textContent = 'Editar Información del Departamento';
+                document.getElementById('nombre').value = nombre;
+                document.getElementById('universidad').value = universidad;
+                document.getElementById('historia').value = historia;
+                document.getElementById('info_matricula').value = info_matricula;
+                document.getElementById('direccion').value = direccion;
+                document.getElementById('telefono').value = telefono;
+                document.getElementById('horario').value = horario;
+
+                document.getElementById('current_imagen').textContent = imagen ? imagen.split('/').pop() : 'Ninguna';
+                document.getElementById('imagen_preview').innerHTML = imagen ? `<img src="${imagen}" class="img-thumbnail" style="max-width: 80px;">` : '';
+
+                document.getElementById('current_logo_unge').textContent = logo_unge ? logo_unge.split('/').pop() : 'Ninguno';
+                document.getElementById('logo_unge_preview').innerHTML = logo_unge ? `<img src="${logo_unge}" class="img-thumbnail" style="max-width: 60px;">` : '';
+
+                document.getElementById('current_logo_pais').textContent = logo_pais ? logo_pais.split('/').pop() : 'Ninguno';
+                document.getElementById('logo_pais_preview').innerHTML = logo_pais ? `<img src="${logo_pais}" class="img-thumbnail" style="max-width: 60px;">` : '';
+            }
+        });
+    }
+
+    // Script para la pestaña de Publicaciones
+    const publicacionModal = document.getElementById('publicacionModal');
+    if (publicacionModal) {
+        publicacionModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget; // Botón que activó el modal
+            document.getElementById('publicacion_action').value = 'add_publicacion';
+            document.getElementById('publicacionModalLabel').textContent = 'Nueva Publicación';
+            document.getElementById('publicacion_id').value = '';
+            document.getElementById('publicacion_titulo').value = '';
+            document.getElementById('publicacion_contenido').value = '';
+            document.getElementById('publicacion_tipo').value = '';
+            document.getElementById('publicacion_fecha_evento').value = '';
+            document.getElementById('publicacion_visible').checked = true; // Por defecto visible
+            document.getElementById('current_imagen_publicacion').textContent = 'Ninguna';
+            document.getElementById('imagen_publicacion_preview').innerHTML = '';
+            document.getElementById('current_archivo_adjunto').textContent = 'Ninguno';
+            document.getElementById('archivo_adjunto_preview').innerHTML = '';
+            document.getElementById('submitPublicacionBtn').textContent = 'Guardar Publicación';
+            document.getElementById('submitPublicacionBtn').classList.remove('btn-warning');
+            document.getElementById('submitPublicacionBtn').classList.add('btn-success');
+
+
+            if (button.classList.contains('edit-publicacion-btn')) {
+                const row = button.closest('tr');
+                const id = row.getAttribute('data-id_publicacion');
+                const titulo = row.getAttribute('data-titulo');
+                const contenido = row.getAttribute('data-contenido');
+                const tipo = row.getAttribute('data-tipo');
+                const imagen = row.getAttribute('data-imagen');
+                const archivo_adjunto = row.getAttribute('data-archivo_adjunto');
+                const fecha_evento = row.getAttribute('data-fecha_evento');
+                const visible = row.getAttribute('data-visible');
+
+                document.getElementById('publicacion_action').value = 'edit_publicacion';
+                document.getElementById('publicacionModalLabel').textContent = 'Editar Publicación';
+                document.getElementById('publicacion_id').value = id;
+                document.getElementById('publicacion_titulo').value = titulo;
+                document.getElementById('publicacion_contenido').value = contenido;
+                document.getElementById('publicacion_tipo').value = tipo;
+                document.getElementById('publicacion_fecha_evento').value = fecha_evento;
+                document.getElementById('publicacion_visible').checked = (visible == 1);
+
+                document.getElementById('current_imagen_publicacion').textContent = imagen ? imagen.split('/').pop() : 'Ninguna';
+                document.getElementById('imagen_publicacion_preview').innerHTML = imagen ? `<img src="${imagen}" class="img-thumbnail" style="max-width: 80px;">` : '';
+
+                document.getElementById('current_archivo_adjunto').textContent = archivo_adjunto ? archivo_adjunto.split('/').pop() : 'Ninguno';
+                document.getElementById('archivo_adjunto_preview').innerHTML = archivo_adjunto ? `<a href="${archivo_adjunto}" target="_blank"><i class="fas fa-file-alt"></i> Ver archivo</a>` : '';
+
+                document.getElementById('submitPublicacionBtn').textContent = 'Actualizar Publicación';
+                document.getElementById('submitPublicacionBtn').classList.remove('btn-success');
+                document.getElementById('submitPublicacionBtn').classList.add('btn-warning');
+            }
+        });
+    }
+
+    // Script para la pestaña de Requisitos
+    const requisitoModal = document.getElementById('requisitoModal');
+    if (requisitoModal) {
+        requisitoModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget; // Botón que activó el modal
+            document.getElementById('requisito_action').value = 'add_requisito';
+            document.getElementById('requisitoModalLabel').textContent = 'Nuevo Requisito de Matrícula';
+            document.getElementById('requisito_id').value = '';
+            document.getElementById('requisito_titulo').value = '';
+            document.getElementById('requisito_descripcion').value = '';
+            document.getElementById('requisito_tipo').value = '';
+            document.getElementById('requisito_obligatorio').checked = false;
+            document.getElementById('requisito_visible').checked = true; // Por defecto visible
+            document.getElementById('current_requisito_archivo_modelo').textContent = 'Ninguno';
+            document.getElementById('requisito_archivo_modelo_preview').innerHTML = '';
+            document.getElementById('submitRequisitoBtn').textContent = 'Guardar Requisito';
+            document.getElementById('submitRequisitoBtn').classList.remove('btn-warning');
+            document.getElementById('submitRequisitoBtn').classList.add('btn-info');
+
+
+            if (button.classList.contains('edit-requisito-btn')) {
+                const row = button.closest('tr');
+                const id = row.getAttribute('data-id_requisito');
+                const titulo = row.getAttribute('data-titulo');
+                const descripcion = row.getAttribute('data-descripcion');
+                const tipo = row.getAttribute('data-tipo');
+                const obligatorio = row.getAttribute('data-obligatorio');
+                const archivo_modelo = row.getAttribute('data-archivo_modelo');
+                const visible = row.getAttribute('data-visible');
+
+                document.getElementById('requisito_action').value = 'edit_requisito';
+                document.getElementById('requisitoModalLabel').textContent = 'Editar Requisito de Matrícula';
+                document.getElementById('requisito_id').value = id;
+                document.getElementById('requisito_titulo').value = titulo;
+                document.getElementById('requisito_descripcion').value = descripcion;
+                document.getElementById('requisito_tipo').value = tipo;
+                document.getElementById('requisito_obligatorio').checked = (obligatorio == 1);
+                document.getElementById('requisito_visible').checked = (visible == 1);
+
+                document.getElementById('current_requisito_archivo_modelo').textContent = archivo_modelo ? archivo_modelo.split('/').pop() : 'Ninguno';
+                document.getElementById('requisito_archivo_modelo_preview').innerHTML = archivo_modelo ? `<a href="${archivo_modelo}" target="_blank"><i class="fas fa-file-alt"></i> Ver archivo</a>` : '';
+
+                document.getElementById('submitRequisitoBtn').textContent = 'Actualizar Requisito';
+                document.getElementById('submitRequisitoBtn').classList.remove('btn-info');
+                document.getElementById('submitRequisitoBtn').classList.add('btn-warning');
+            }
+        });
+    }
+
+    // Manejar el cambio de pestaña para que la URL se actualice (útil para recargas)
+    var configTabs = document.getElementById('configTabs');
+    if (configTabs) {
+        configTabs.addEventListener('shown.bs.tab', function (event) {
+            const activeTabId = event.target.id.replace('-tab', '');
+            history.pushState(null, '', 'configuracion.php?tab=' + activeTabId);
+        });
+    }
+});
 </script>

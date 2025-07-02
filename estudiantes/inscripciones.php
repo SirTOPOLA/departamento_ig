@@ -1,14 +1,14 @@
 <?php
 
 require_once '../includes/functions.php';
-// Asegura que el usuario logueado sea un estudiante
+// Ensure the logged-in user is a student
 check_login_and_role('Estudiante');
 
 require_once '../config/database.php';
 
-// --- Lógica de Procesamiento POST para la Inscripción (DEBE ESTAR ANTES DE CUALQUIER SALIDA HTML) ---
-// Obtener el id_estudiante del estudiante y el ID del CURSO en el que se encuentra ACTUALMENTE para el AÑO ACADÉMICO ACTUAL
-$stmt_detalles_estudiante = $pdo->prepare("
+// --- POST Processing Logic for Enrollment (MUST BE BEFORE ANY HTML OUTPUT) ---
+// Get the student's id_estudiante and the ID of the COURSE they are CURRENTLY IN for the CURRENT ACADEMIC YEAR
+$stmt_student_details = $pdo->prepare("
     SELECT
         e.id AS id_estudiante,
         ce.id_curso AS id_curso_actual_estudiante,
@@ -24,56 +24,56 @@ $stmt_detalles_estudiante = $pdo->prepare("
         semestres s ON aa.id = s.id_anio_academico AND s.id_curso_asociado_al_semestre = ce.id_curso
     WHERE
         e.id_usuario = :id_usuario
-        AND aa.nombre_anio = (SELECT nombre_anio FROM anios_academicos ORDER BY id DESC LIMIT 1) -- Asume que el último año es el actual
+        AND aa.nombre_anio = (SELECT nombre_anio FROM anios_academicos ORDER BY id DESC LIMIT 1) -- Assumes the latest year is the current one
         AND CURDATE() BETWEEN s.fecha_inicio AND s.fecha_fin
-    ORDER BY s.numero_semestre DESC -- En caso de que múltiples semestres estén activos para el mismo año/curso (improbable, pero para robustez)
+    ORDER BY s.numero_semestre DESC -- In case multiple semesters are active for the same year/course (unlikely, but for robustness)
     LIMIT 1
 ");
-$stmt_detalles_estudiante->bindParam(':id_usuario', $_SESSION['user_id'], PDO::PARAM_INT);
-$stmt_detalles_estudiante->execute();
-$contexto_estudiante = $stmt_detalles_estudiante->fetch(PDO::FETCH_ASSOC);
+$stmt_student_details->bindParam(':id_usuario', $_SESSION['user_id'], PDO::PARAM_INT);
+$stmt_student_details->execute();
+$student_context = $stmt_student_details->fetch(PDO::FETCH_ASSOC);
 
-if (!$contexto_estudiante) {
+if (!$student_context) {
     set_flash_message('danger', 'Error: No se encontró el contexto académico actual para su perfil de estudiante. Contacte a la administración.');
-    header('Location: ../logout.php'); // Redirige a cerrar sesión o a una página de error
+    header('Location: ../logout.php'); // Redirect to logout or an error page
     exit;
 }
-$id_estudiante_actual = $contexto_estudiante['id_estudiante'];
-$id_curso_actual_estudiante = $contexto_estudiante['id_curso_actual_estudiante']; // ID del curso ACTUAL del estudiante (ej. 'primero')
-$id_semestre_actual_en_curso = $contexto_estudiante['id_semestre_actual_estudiante_en_curso']; // ID del semestre actual asociado al curso del estudiante
-$numero_semestre_actual_en_curso = $contexto_estudiante['numero_semestre_actual_estudiante_en_curso']; // Número del semestre actual (ej. 1, 2)
+$id_estudiante_actual = $student_context['id_estudiante'];
+$id_curso_actual_estudiante = $student_context['id_curso_actual_estudiante']; // Student's CURRENT Course ID (e.g., 'primero')
+$id_semestre_actual_en_curso = $student_context['id_semestre_actual_estudiante_en_curso']; // ID of the current semester associated with student's current course
+$numero_semestre_actual_en_curso = $student_context['numero_semestre_actual_estudiante_en_curso']; // Number of the current semester (e.g., 1, 2)
 
-// Obtener el semestre actual real (esta función debería devolver el verdadero semestre actual independientemente del curso del estudiante)
-// Esto es para el período de inscripción general, no necesariamente lo que se *espera* que el estudiante esté cursando.
-$semestre_actual = get_current_semester($pdo);
+// Get the actual current semester (this function should return the true current semester regardless of student's course)
+// This is for the overall enrollment period, not necessarily what the student is *expected* to be taking.
+$current_semester = get_current_semester($pdo);
 
-// Si get_current_semester no encuentra uno para el contexto del estudiante, priorizar el semestre actual real del estudiante
-if (!$semestre_actual && $id_semestre_actual_en_curso) {
-    $stmt_semestre_especifico = $pdo->prepare("SELECT * FROM semestres WHERE id = :id_semestre");
-    $stmt_semestre_especifico->bindParam(':id_semestre', $id_semestre_actual_en_curso, PDO::PARAM_INT);
-    $stmt_semestre_especifico->execute();
-    $semestre_actual = $stmt_semestre_especifico->fetch(PDO::FETCH_ASSOC);
+// If the get_current_semester doesn't find one for the student's context, prioritize the student's actual current semester
+if (!$current_semester && $id_semestre_actual_en_curso) {
+    $stmt_specific_semester = $pdo->prepare("SELECT * FROM semestres WHERE id = :id_semestre");
+    $stmt_specific_semester->bindParam(':id_semestre', $id_semestre_actual_en_curso, PDO::PARAM_INT);
+    $stmt_specific_semester->execute();
+    $current_semester = $stmt_specific_semester->fetch(PDO::FETCH_ASSOC);
 }
 
-// Verificar si se pudo determinar algún semestre
-if (!$semestre_actual) {
+// Check if a semester could be determined at all
+if (!$current_semester) {
     set_flash_message('danger', 'Error: No se pudo determinar el semestre académico actual. Contacte a la administración.');
-    // header('Location: ../dashboard.php'); // Redirige a una página segura
+    // header('Location: ../dashboard.php'); // Redirect to a safe page
     // exit;
 }
 
 
-// --- Obtener datos para la vista del estudiante ---
-$titulo_pagina = "Inscripción Semestral"; // Título ajustado
-include_once '../includes/header.php'; // Incluir cabecera aquí, después de toda la lógica POST y las redirecciones
+// --- Get data for the student view ---
+$page_title = "Inscripción Semestral"; // Adjusted title
+include_once '../includes/header.php'; // Include header here, after all POST logic and redirects
 
-$mensajes_flash = get_flash_messages();
+$flash_messages = get_flash_messages();
 
 
-// Asignaturas en las que el estudiante ya está inscrito para el semestre actual (pendiente o confirmada)
-$inscripciones_actuales = [];
-if ($semestre_actual) {
-    $stmt_inscripciones_actuales = $pdo->prepare("
+// Subjects the student is already enrolled in for the current semester (pending or confirmed)
+$current_enrollments = [];
+if ($current_semester) {
+    $stmt_current_enrollments = $pdo->prepare("
         SELECT
             ie.id_asignatura,
             a.nombre_asignatura,
@@ -92,28 +92,28 @@ if ($semestre_actual) {
         AND ie.id_semestre = :id_semestre_actual_inscripcion
         ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC
     ");
-    $stmt_inscripciones_actuales->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
-    $stmt_inscripciones_actuales->bindParam(':id_semestre_actual_inscripcion', $semestre_actual['id'], PDO::PARAM_INT);
-    $stmt_inscripciones_actuales->execute();
-    $inscripciones_actuales = $stmt_inscripciones_actuales->fetchAll(PDO::FETCH_ASSOC);
+    $stmt_current_enrollments->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
+    $stmt_current_enrollments->bindParam(':id_semestre_actual_inscripcion', $current_semester['id'], PDO::PARAM_INT);
+    $stmt_current_enrollments->execute();
+    $current_enrollments = $stmt_current_enrollments->fetchAll(PDO::FETCH_ASSOC);
 }
 
 
-// Asignaturas aprobadas por el estudiante (para verificación de prerrequisitos)
-$ids_asignaturas_aprobadas = [];
-$stmt_asignaturas_aprobadas = $pdo->prepare("
+// Subjects approved by the student (for prerequisite verification)
+$approved_asignaturas_ids = [];
+$stmt_approved_asignaturas = $pdo->prepare("
     SELECT id_asignatura FROM historial_academico
     WHERE id_estudiante = :id_estudiante AND estado_final = 'APROBADO'
 ");
-$stmt_asignaturas_aprobadas->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
-$stmt_asignaturas_aprobadas->execute();
-$ids_asignaturas_aprobadas = $stmt_asignaturas_aprobadas->fetchAll(PDO::FETCH_COLUMN);
+$stmt_approved_asignaturas->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
+$stmt_approved_asignaturas->execute();
+$approved_asignaturas_ids = $stmt_approved_asignaturas->fetchAll(PDO::FETCH_COLUMN);
 
-// Asignaturas reprobadas por el estudiante (obligatorias para recursar)
-$asignaturas_reprobadas = [];
-$ids_asignaturas_reprobadas = [];
-if ($semestre_actual) { // Solo si hay un semestre activo para inscripción
-    $stmt_asignaturas_reprobadas = $pdo->prepare("
+// Subjects reprobated by the student (mandatory to retake)
+$reproved_asignaturas = [];
+$reproved_asignaturas_ids = [];
+if ($current_semester) { // Only if there's an active semester for enrollment
+    $stmt_reproved_asignaturas = $pdo->prepare("
         SELECT
             ha.id_asignatura AS id,
             a.nombre_asignatura,
@@ -130,31 +130,31 @@ if ($semestre_actual) { // Solo si hay un semestre activo para inscripción
         WHERE ha.id_estudiante = :id_estudiante
         AND ha.estado_final = 'REPROBADO'
         AND a.id NOT IN (
-            SELECT id_asignatura FROM inscripciones_estudiantes WHERE id_estudiante = :id_estudiante_actual_inscripcion AND id_semestre = :id_semestre_actual_inscripcion AND confirmada = 1
+            SELECT id_asignatura FROM inscripciones_estudiantes WHERE id_estudiante = :id_estudiante_current AND id_semestre = :id_semestre_current AND confirmada = 1
         )
         ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC
     ");
-    $stmt_asignaturas_reprobadas->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
-    $stmt_asignaturas_reprobadas->bindParam(':id_estudiante_actual_inscripcion', $id_estudiante_actual, PDO::PARAM_INT);
-    $stmt_asignaturas_reprobadas->bindParam(':id_semestre_actual_inscripcion', $semestre_actual['id'], PDO::PARAM_INT);
-    $stmt_asignaturas_reprobadas->execute();
-    $asignaturas_reprobadas = $stmt_asignaturas_reprobadas->fetchAll(PDO::FETCH_ASSOC);
-    $ids_asignaturas_reprobadas = array_column($asignaturas_reprobadas, 'id');
+    $stmt_reproved_asignaturas->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
+    $stmt_reproved_asignaturas->bindParam(':id_estudiante_current', $id_estudiante_actual, PDO::PARAM_INT);
+    $stmt_reproved_asignaturas->bindParam(':id_semestre_current', $current_semester['id'], PDO::PARAM_INT);
+    $stmt_reproved_asignaturas->execute();
+    $reproved_asignaturas = $stmt_reproved_asignaturas->fetchAll(PDO::FETCH_ASSOC);
+    $reproved_asignaturas_ids = array_column($reproved_asignaturas, 'id');
 }
 
 
-// Asignaturas disponibles para inscripción para el curso actual del estudiante y *semestres anteriores*
-$asignaturas_disponibles_para_modal = [];
-if ($semestre_actual) {
-    // Ahora obtenemos todas las asignaturas potenciales para el curso actual del estudiante (de curso_estudiante)
-    // hasta su semestre actual en ese curso, excluyendo las aprobadas o las que ya están inscritas.
-    $stmt_asignaturas_disponibles = $pdo->prepare("
+// Available subjects for enrollment for the student's current course and *previous semesters*
+$available_asignaturas_for_modal = [];
+if ($current_semester) {
+    // We now fetch all potential subjects for the student's current course (from course_estudiante)
+    // up to their current semester in that course, excluding approved or currently enrolled ones.
+    $stmt_available_asignaturas = $pdo->prepare("
         SELECT
             a.id,
             a.nombre_asignatura,
             a.creditos,
             a.id_prerequisito,
-            pa.nombre_asignatura AS nombre_prerequisito,
+            pa.nombre_asignatura AS prerequisito_nombre,
             c.nombre_curso,
             a.semestre_recomendado
         FROM
@@ -163,36 +163,36 @@ if ($semestre_actual) {
         JOIN cursos c ON a.id_curso = c.id
         WHERE
             a.id_curso = :id_curso_estudiante
-            AND a.semestre_recomendado <= :numero_semestre_actual_estudiante_en_curso -- Solo mostrar asignaturas hasta el semestre recomendado actual del estudiante
+            AND a.semestre_recomendado <= :numero_semestre_actual_estudiante_en_curso -- Only show subjects up to the student's current recommended semester
             AND a.id NOT IN (
                 SELECT id_asignatura FROM historial_academico WHERE id_estudiante = :id_estudiante_historial_aprobado AND estado_final = 'APROBADO'
             )
             AND a.id NOT IN (
-                SELECT id_asignatura FROM inscripciones_estudiantes WHERE id_estudiante = :id_estudiante_inscrito AND id_semestre = :id_semestre_inscrito
+                SELECT id_asignatura FROM inscripciones_estudiantes WHERE id_estudiante = :id_estudiante_enrolled AND id_semestre = :id_semestre_enrolled
             )
         ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC
     ");
 
-    $stmt_asignaturas_disponibles->bindParam(':id_curso_estudiante', $id_curso_actual_estudiante, PDO::PARAM_INT);
-    $stmt_asignaturas_disponibles->bindParam(':numero_semestre_actual_estudiante_en_curso', $numero_semestre_actual_en_curso, PDO::PARAM_INT);
-    $stmt_asignaturas_disponibles->bindParam(':id_estudiante_historial_aprobado', $id_estudiante_actual, PDO::PARAM_INT);
-    $stmt_asignaturas_disponibles->bindParam(':id_estudiante_inscrito', $id_estudiante_actual, PDO::PARAM_INT);
-    $stmt_asignaturas_disponibles->bindParam(':id_semestre_inscrito', $semestre_actual['id'], PDO::PARAM_INT); // Este es el ID del semestre de inscripción actual
+    $stmt_available_asignaturas->bindParam(':id_curso_estudiante', $id_curso_actual_estudiante, PDO::PARAM_INT);
+    $stmt_available_asignaturas->bindParam(':numero_semestre_actual_estudiante_en_curso', $numero_semestre_actual_en_curso, PDO::PARAM_INT);
+    $stmt_available_asignaturas->bindParam(':id_estudiante_historial_aprobado', $id_estudiante_actual, PDO::PARAM_INT);
+    $stmt_available_asignaturas->bindParam(':id_estudiante_enrolled', $id_estudiante_actual, PDO::PARAM_INT);
+    $stmt_available_asignaturas->bindParam(':id_semestre_enrolled', $current_semester['id'], PDO::PARAM_INT); // This is the ID of the actual registration semester
 
-    $stmt_asignaturas_disponibles->execute();
-    $asignaturas_disponibles_para_modal = $stmt_asignaturas_disponibles->fetchAll(PDO::FETCH_ASSOC);
+    $stmt_available_asignaturas->execute();
+    $available_asignaturas_for_modal = $stmt_available_asignaturas->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fusionar las asignaturas reprobadas en la lista de disponibles, asegurando que aparezcan
-    foreach ($asignaturas_reprobadas as $reprobada) {
-        $encontrada = false;
-        foreach ($asignaturas_disponibles_para_modal as $disponible) {
-            if ($disponible['id'] == $reprobada['id']) {
-                $encontrada = true;
+    // Merge reprobated subjects into the available list, ensuring they appear
+    foreach ($reproved_asignaturas as $reproved) {
+        $found = false;
+        foreach ($available_asignaturas_for_modal as $available) {
+            if ($available['id'] == $reproved['id']) {
+                $found = true;
                 break;
             }
         }
-        if (!$encontrada) {
-            $asignaturas_disponibles_para_modal[] = $reprobada;
+        if (!$found) {
+            $available_asignaturas_for_modal[] = $reproved;
         }
     }
 }
@@ -201,7 +201,7 @@ if ($semestre_actual) {
 <h1 class="mt-4">Inscripción Semestral</h1>
 <p class="lead">Gestiona tu inscripción para el semestre actual y revisa tus asignaturas.</p>
 
-<?php if (!$semestre_actual): ?>
+<?php if (!$current_semester): ?>
     <div class="alert alert-info">
         Actualmente no hay un semestre académico activo para la inscripción. Por favor, contacta a la administración.
     </div>
@@ -218,7 +218,7 @@ if ($semestre_actual) {
             <h5 class="mb-0">Tus Asignaturas Inscritas para el Semestre Actual</h5>
         </div>
         <div class="card-body">
-            <?php if (count($inscripciones_actuales) > 0): ?>
+            <?php if (count($current_enrollments) > 0): ?>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover">
                         <thead>
@@ -231,21 +231,21 @@ if ($semestre_actual) {
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if (!empty($inscripciones_actuales)): ?>
-                                <?php foreach ($inscripciones_actuales as $inscripcion): ?>
+                            <?php if (!empty($current_enrollments)): ?>
+                                <?php foreach ($current_enrollments as $enrollment): ?>
                                     <tr>
                                         <td>
-                                            <?= htmlspecialchars($inscripcion['nombre_asignatura']) ?>
-                                            <br><small class="text-muted">ID: <?= (int) ($inscripcion['id_asignatura'] ?? 0) ?></small>
+                                            <?= htmlspecialchars($enrollment['nombre_asignatura']) ?>
+                                            <br><small class="text-muted">ID: <?= (int) ($enrollment['id_asignatura'] ?? 0) ?></small>
                                         </td>
-                                        <td class="text-center"><?= (int) $inscripcion['creditos'] ?></td>
-                                        <td><?= htmlspecialchars($inscripcion['nombre_curso'] ?? '—') ?></td>
+                                        <td class="text-center"><?= (int) $enrollment['creditos'] ?></td>
+                                        <td><?= htmlspecialchars($enrollment['nombre_curso'] ?? '—') ?></td>
                                         <td>
-                                            <?= htmlspecialchars($inscripcion['semestre_actual_numero'] ?? '—') ?>
-                                            <span class="text-muted">(<?= htmlspecialchars($inscripcion['nombre_anio'] ?? '—') ?>)</span>
+                                            <?= htmlspecialchars($enrollment['semestre_actual_numero'] ?? '—') ?>
+                                            <span class="text-muted">(<?= htmlspecialchars($enrollment['nombre_anio'] ?? '—') ?>)</span>
                                         </td>
                                         <td class="text-center">
-                                            <?php if (!empty($inscripcion['confirmada'])): ?>
+                                            <?php if (!empty($enrollment['confirmada'])): ?>
                                                 <span class="badge bg-success">
                                                     <i class="fas fa-check-circle me-1"></i> Confirmada
                                                 </span>
@@ -276,13 +276,13 @@ if ($semestre_actual) {
 
 
 
-    <?php if ($semestre_actual): ?>
+    <?php if ($current_semester): ?>
         <div class="modal fade" id="enrollmentModal" tabindex="-1" aria-labelledby="enrollmentModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title" id="enrollmentModalLabel">Inscribirse en Asignaturas para el Semestre:
-                            <?php echo htmlspecialchars($semestre_actual['numero_semestre'] . 'º Semestre - ' . $semestre_actual['nombre_anio']); ?>
+                            <?php echo htmlspecialchars($current_semester['numero_semestre'] . 'º Semestre - ' . $current_semester['nombre_anio']); ?>
                         </h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
@@ -298,7 +298,8 @@ if ($semestre_actual) {
                         <div class="modal-footer">
                             <span id="modalSelectedCount" class="me-auto text-muted">Asignaturas seleccionadas: 0</span>
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                            <button type="submit" class="btn btn-primary" id="enrollSubmitBtn" disabled>Enviar Solicitud</button>
+                            <button type="submit" class="btn btn-primary" id="enrollSubmitBtn" disabled>Enviar
+                                Solicitud</button>
                         </div>
                     </form>
                 </div>
@@ -318,334 +319,433 @@ if ($semestre_actual) {
 
 <?php include_once '../includes/footer.php'; ?>
 
+
+
 <script>
     // Variables globales que no dependen del contenido del modal
-    const mensajesFlash = <?php echo json_encode($mensajes_flash ?? []); ?>; // Asegura que mensajes_flash siempre esté definido
-    const modalInscripcion = document.getElementById('enrollmentModal'); // El modal principal
-    const formularioInscripcion = document.getElementById('enrollmentForm'); // El formulario del modal
-    const botonEnviarInscripcion = document.getElementById('enrollSubmitBtn'); // Botón de envío del formulario del modal
+    const flashMessages = <?php echo json_encode($flash_messages ?? []); ?>; // Asegura que flash_messages siempre esté definido
+    const enrollmentModal = document.getElementById('enrollmentModal'); // El modal principal
+    const enrollmentForm = document.getElementById('enrollmentForm'); // El formulario del modal
+    const submitEnrollmentBtn = document.getElementById('enrollSubmitBtn'); // Botón de envío del formulario del modal
 
     // Estas variables se redefinirán CADA VEZ que el contenido del modal se cargue vía AJAX
-    let checkboxesModal;
-    let contadorSeleccionadasModal;
+    let modalCheckboxes;
+    let modalSelectedCountSpan;
     let reprobadasObligatorias; // Checkboxes para asignaturas reprobadas
-    let listaAsignaturasDisponibles; // Contenedor para asignaturas disponibles
+    let availableAsignaturasList; // Contenedor para asignaturas disponibles
 
     // Variables para elementos de filtro (también se redefinirán)
-    let filtroCurso;
-    let filtroSemestre;
-    let filtroBusqueda;
+    let filterCourse;
+    let filterSemester;
+    let filterSearch;
 
     // Nuevo elemento para el mensaje de "sin resultados"
-    let mensajeSinResultados;
+    let noResultsMessage;
 
     // --- Funciones de Ayuda ---
 
     // Función para mostrar un Toast de Bootstrap (sin cambios)
-    function mostrarToast(tipo, mensaje) {
-        const contenedorToast = document.querySelector('.toast-container');
-        if (!contenedorToast) {
+    function showToast(type, message) {
+        const toastContainer = document.querySelector('.toast-container');
+        if (!toastContainer) {
             console.error('No se encontró el contenedor de toasts. Asegúrate de que el div.toast-container exista en el HTML.');
             return;
         }
-        const idToast = 'toast-' + Date.now();
+        const toastId = 'toast-' + Date.now();
 
-        let colorFondo = '';
-        switch (tipo) {
-            case 'success': colorFondo = 'bg-success'; break;
-            case 'danger': colorFondo = 'bg-danger'; break;
-            case 'warning': colorFondo = 'bg-warning text-dark'; break;
-            case 'info': colorFondo = 'bg-info'; break;
-            default: colorFondo = 'bg-secondary'; break;
+        let bgColor = '';
+        switch (type) {
+            case 'success': bgColor = 'bg-success'; break;
+            case 'danger': bgColor = 'bg-danger'; break;
+            case 'warning': bgColor = 'bg-warning text-dark'; break;
+            case 'info': bgColor = 'bg-info'; break;
+            default: bgColor = 'bg-secondary'; break;
         }
 
-        const htmlToast = `
-            <div id="${idToast}" class="toast align-items-center text-white ${colorFondo} border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+        const toastHtml = `
+            <div id="${toastId}" class="toast align-items-center text-white ${bgColor} border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
                 <div class="d-flex">
                     <div class="toast-body">
-                        ${mensaje}
+                        ${message}
                     </div>
                     <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
                 </div>
             </div>
         `;
-        contenedorToast.insertAdjacentHTML('beforeend', htmlToast);
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
 
-        const elementoToast = document.getElementById(idToast);
-        const toast = new bootstrap.Toast(elementoToast);
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement);
         toast.show();
 
-        elementoToast.addEventListener('hidden.bs.toast', function () {
-            elementoToast.remove();
+        toastElement.addEventListener('hidden.bs.toast', function () {
+            toastElement.remove();
         });
     }
 
     // --- Lógica del Modal y sus Filtros ---
 
     // Esta función se llamará CADA VEZ que el contenido del modal se cargue vía AJAX
-    function inicializarContenidoModal() {
-        // 1. Volver a obtener las referencias a los elementos dentro del modal, ya que su contenido es nuevo
-        // Asegúrate de que el selector para 'checkboxesModal' incluya tanto las asignaturas regulares como las reprobadas.
-        checkboxesModal = document.querySelectorAll('#modalContentContainer input[name="selected_asignaturas[]"]');
-        contadorSeleccionadasModal = document.getElementById('modalSelectedCount');
-        // Selector ajustado para obtener solo los inputs de tipo checkbox dentro de las etiquetas con la clase reprobada-obligatoria
-        reprobadasObligatorias = document.querySelectorAll('.reprobada-obligatoria input[type="checkbox"]');
-        listaAsignaturasDisponibles = document.getElementById('availableAsignaturasList');
+    function initializeModalContent() {
+        console.log("initializeModalContent ejecutado.");
 
-        // 2. Referencias a los elementos de filtro que también se cargan con AJAX
-        filtroCurso = document.getElementById('filterCourse');
-        filtroSemestre = document.getElementById('filterSemester');
-        filtroBusqueda = document.getElementById('filterSearch');
+        // 1. Volver a obtener las referencias a los elementos dentro del modal, ya que su contenido es nuevo
+        // Asegúrate de que estos selectores apunten a los IDs correctos que *ahora* generará tu PHP.
+        modalCheckboxes = document.querySelectorAll('#modalContentContainer input[name="selected_asignaturas[]"]');
+        modalSelectedCountSpan = document.getElementById('modalSelectedCount'); // Correct ID for the span
+        reprobadasObligatorias = document.querySelectorAll('.reprobada-obligatoria input[type="checkbox"]');
+        availableAsignaturasList = document.getElementById('availableAsignaturasList'); // Correct ID for the list container
+
+        // 2. Referencias a los elementos de filtro que también se cargan con AJAX (con los IDs corregidos)
+        filterCourse = document.getElementById('filterCourse');
+        filterSemester = document.getElementById('filterSemester');
+        filterSearch = document.getElementById('filterSearch');
 
         // 3. Crear o re-seleccionar el elemento del mensaje de "sin resultados" si no existe
-        mensajeSinResultados = document.getElementById('noResultsFilterMessage');
-        if (!mensajeSinResultados) {
-            mensajeSinResultados = document.createElement('p');
-            mensajeSinResultados.id = 'noResultsFilterMessage';
-            mensajeSinResultados.classList.add('alert', 'alert-info', 'text-center', 'mt-3');
-            mensajeSinResultados.style.display = 'none'; // Oculto por defecto
-            if (listaAsignaturasDisponibles) {
-                // Insertar después de listaAsignaturasDisponibles o su padre si está disponible
-                listaAsignaturasDisponibles.parentNode.insertBefore(mensajeSinResultados, listaAsignaturasDisponibles.nextSibling);
+        noResultsMessage = document.getElementById('noResultsFilterMessage');
+        if (!noResultsMessage) {
+            noResultsMessage = document.createElement('p');
+            noResultsMessage.id = 'noResultsFilterMessage';
+            noResultsMessage.classList.add('alert', 'alert-info', 'text-center', 'mt-3');
+            noResultsMessage.style.display = 'none'; // Oculto por defecto
+            if (availableAsignaturasList && availableAsignaturasList.parentNode) { // Ensure parent exists
+                // Insertar después de availableAsignaturasList
+                availableAsignaturasList.parentNode.insertBefore(noResultsMessage, availableAsignaturasList.nextSibling);
             }
         }
 
         // 4. Adjuntar event listeners a los checkboxes del modal
-        checkboxesModal.forEach(checkbox => {
-            checkbox.addEventListener('change', actualizarContadorSeleccionadasModal);
+        // Primero, removemos listeners para evitar duplicados si initializeModalContent se llama múltiples veces.
+        modalCheckboxes.forEach(checkbox => {
+            checkbox.removeEventListener('change', updateModalSelectedCount);
+            checkbox.addEventListener('change', updateModalSelectedCount);
         });
 
         // 5. Adjuntar event listeners para los filtros
-        if (filtroCurso) filtroCurso.addEventListener('change', filtrarAsignaturas);
-        if (filtroSemestre) filtroSemestre.addEventListener('change', filtrarAsignaturas);
-        if (filtroBusqueda) filtroBusqueda.addEventListener('keyup', filtrarAsignaturas);
+        // Similar, removemos antes de añadir para evitar duplicados.
+        if (filterCourse) {
+            filterCourse.removeEventListener('change', filterAsignaturas);
+            filterCourse.addEventListener('change', filterAsignaturas);
+        }
+        if (filterSemester) {
+            filterSemester.removeEventListener('change', filterAsignaturas);
+            filterSemester.addEventListener('change', filterAsignaturas);
+        }
+        if (filterSearch) {
+            filterSearch.removeEventListener('keyup', filterAsignaturas);
+            filterSearch.addEventListener('keyup', filterAsignaturas);
+        }
 
-        // 6. Llamar a actualizarContadorSeleccionadasModal y filtrarAsignaturas para el estado inicial
-        actualizarContadorSeleccionadasModal();
-        filtrarAsignaturas(); // Aplicar filtros al cargar el contenido del modal
+        // 6. Llamar a updateModalSelectedCount y filterAsignaturas para el estado inicial
+        updateModalSelectedCount();
+        filterAsignaturas(); // Aplicar filtros al cargar el contenido del modal
 
         // 7. Reinicializar tooltips de Bootstrap para el contenido recién cargado
-        var listaActivadoresTooltip = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        var listaTooltips = listaActivadoresTooltip.map(function (elementoActivadorTooltip) {
-            return new bootstrap.Tooltip(elementoActivadorTooltip)
+        // Asegúrate de que 'bootstrap' esté disponible globalmente (es decir, Bootstrap JS cargado)
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
         });
+
+        console.log("Número de checkboxes encontrados:", modalCheckboxes.length);
+        console.log("reprobadasObligatorias encontrados:", reprobadasObligatorias.length);
     }
 
-    function actualizarContadorSeleccionadasModal() {
-        let contador = 0;
-        let todasReprobadasSeleccionadas = true;
+    function updateModalSelectedCount() {
+        console.log("updateModalSelectedCount ejecutado.");
+        let count = 0;
+        let allReprobadasSelected = true;
 
-        // Contar asignaturas reprobadas obligatorias (ya están marcadas y deshabilitadas en el HTML)
-        reprobadasObligatorias.forEach(checkbox => {
-            if (!checkbox.checked) {
-                todasReprobadasSeleccionadas = false; // No debería ocurrir si están pre-marcadas correctamente
-            }
-            contador++; // Siempre contar las asignaturas reprobadas como seleccionadas
-        });
-
-        // Contar asignaturas no reprobadas seleccionadas
-        if (listaAsignaturasDisponibles) {
-            // Seleccionar solo los checkboxes que no están marcados como reprobada-obligatoria y están marcados
-            listaAsignaturasDisponibles.querySelectorAll('input[name="selected_asignaturas[]"]:checked:not(.reprobada-obligatoria)').forEach(checkbox => {
-                // Solo contar si está marcado y no está deshabilitado (deshabilitado significa que es una reprobada que ya contamos)
-                if (!checkbox.disabled) {
-                    contador++;
+        // Contar todas las asignaturas seleccionadas (regulares + reprobadas obligatorias)
+        if (modalCheckboxes) {
+            Array.from(modalCheckboxes).forEach(checkbox => {
+                if (checkbox.checked) {
+                    count++;
                 }
             });
         }
 
-        if (contadorSeleccionadasModal) {
-            let puedeEnviar = true;
-            let mensaje = `Asignaturas seleccionadas: ${contador}`;
-            let claseColorTexto = 'text-muted';
+        // Verificar si todas las asignaturas reprobadas obligatorias están seleccionadas
+        if (reprobadasObligatorias) {
+            reprobadasObligatorias.forEach(checkbox => {
+                if (!checkbox.checked) {
+                    allReprobadasSelected = false;
+                }
+            });
+        }
 
-            if (!todasReprobadasSeleccionadas) {
-                puedeEnviar = false;
-                mensaje = 'Debes seleccionar todas las asignaturas reprobadas obligatorias.';
-                claseColorTexto = 'text-danger';
-            } else if (contador === 0 && reprobadasObligatorias.length === 0) {
-                puedeEnviar = false;
-                mensaje = 'Por favor, selecciona al menos una asignatura.';
-                claseColorTexto = 'text-danger';
-            } else if (contador > 6) {
-                puedeEnviar = false;
-                mensaje = `Asignaturas seleccionadas: ${contador} (Máximo 6 asignaturas permitidas)`;
-                claseColorTexto = 'text-danger';
-            } else if (contador < reprobadasObligatorias.length) {
-                // Esto cubre el caso en que una asignatura reprobada pueda desmarcarse de alguna manera.
-                puedeEnviar = false;
-                mensaje = `Debes seleccionar todas las asignaturas reprobadas (${reprobadasObligatorias.length}) para poder inscribirte.`;
-                claseColorTexto = 'text-danger';
+        if (modalSelectedCountSpan) {
+            let canSubmit = true;
+            let message = `Asignaturas seleccionadas: ${count}`;
+            let textColorClass = 'text-muted';
+
+            if (!allReprobadasSelected) {
+                canSubmit = false;
+                message = 'Debes seleccionar todas las asignaturas reprobadas obligatorias.';
+                textColorClass = 'text-danger';
+            } else if (count === 0) {
+                // If count is 0 and all reprobadas are selected (meaning there are no reprobadas),
+                // then no subjects are selected, so disable.
+                canSubmit = false;
+                message = 'Por favor, selecciona al menos una asignatura.';
+                textColorClass = 'text-danger';
+            } else if (count > 6) {
+                canSubmit = false;
+                message = `Asignaturas seleccionadas: ${count} (Máximo 6 asignaturas permitidas)`;
+                textColorClass = 'text-danger';
             }
 
-            if (botonEnviarInscripcion) {
-                if (puedeEnviar) {
-                    botonEnviarInscripcion.removeAttribute('disabled');
+            if (submitEnrollmentBtn) {
+                if (canSubmit) {
+                    submitEnrollmentBtn.removeAttribute('disabled');
                 } else {
-                    botonEnviarInscripcion.setAttribute('disabled', 'disabled');
+                    submitEnrollmentBtn.setAttribute('disabled', 'disabled');
                 }
             }
-            contadorSeleccionadasModal.innerText = mensaje;
-            contadorSeleccionadasModal.classList.remove('text-muted', 'text-danger');
-            contadorSeleccionadasModal.classList.add(claseColorTexto);
+            modalSelectedCountSpan.innerText = message;
+            // Remove existing text color classes before adding new one
+            modalSelectedCountSpan.classList.remove('text-muted', 'text-danger');
+            modalSelectedCountSpan.classList.add(textColorClass);
         }
+
+        console.log("Conteo actual de asignaturas seleccionadas:", count);
+        console.log("submitEnrollmentBtn estado (habilitado/deshabilitado):", submitEnrollmentBtn ? submitEnrollmentBtn.disabled : 'No encontrado (botón no referencia)');
     }
 
 
-    // Función para manejar el envío del formulario del modal
-    if (formularioInscripcion) {
-        formularioInscripcion.addEventListener('submit', async function (evento) {
-            evento.preventDefault();
+    // Function to handle the modal form submission
+    if (enrollmentForm) {
+        enrollmentForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
 
             console.log("--- Inicio del evento de envío del formulario (AJAX Fetch) ---");
 
-            if (botonEnviarInscripcion) {
-                botonEnviarInscripcion.setAttribute('disabled', 'disabled');
-                botonEnviarInscripcion.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Enviando...';
+            if (submitEnrollmentBtn) {
+                submitEnrollmentBtn.setAttribute('disabled', 'disabled');
+                submitEnrollmentBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Enviando...';
             }
 
             try {
-                let valoresSeleccionados = new Set();
+                let selectedValues = new Set();
 
-                // Añadir todos los checkboxes actualmente marcados (incluyendo los reprobados que están pre-marcados y deshabilitados)
-                formularioInscripcion.querySelectorAll('input[name="selected_asignaturas[]"]:checked').forEach(checkbox => {
-                    valoresSeleccionados.add(checkbox.value);
-                });
+                // Add all currently checked checkboxes
+                // modalCheckboxes should already contain both regular and reprobated (if loaded).
+                if (modalCheckboxes) {
+                    modalCheckboxes.forEach(checkbox => {
+                        if (checkbox.checked) {
+                            selectedValues.add(checkbox.value);
+                        }
+                    });
+                }
 
-                // Añadir explícitamente las asignaturas reprobadas deshabilitadas para asegurar que siempre se envíen
-                reprobadasObligatorias.forEach(checkbox => {
-                    valoresSeleccionados.add(checkbox.value);
-                });
 
-                console.log("Valores seleccionados recopilados (Set):", Array.from(valoresSeleccionados));
+                // Explicitly add disabled reprobated subjects to ensure they are always sent,
+                // as disabled inputs are not sent by FormData by default.
+                // This ensures that even if they are not picked up by the initial `modalCheckboxes` (e.g., if the
+                // `name="selected_asignaturas[]"` is only on the hidden input, not the actual checkbox),
+                // their values are still included.
+                if (reprobadasObligatorias) {
+                    reprobadasObligatorias.forEach(checkbox => {
+                        if (checkbox.checked && checkbox.disabled) { // Only add if they are checked AND disabled (mandatory)
+                             selectedValues.add(checkbox.value);
+                        }
+                    });
+                }
 
-                // --- Validaciones del lado del cliente ---
-                const contadorFinal = valoresSeleccionados.size;
 
-                let todasReprobadasIncluidas = true;
-                reprobadasObligatorias.forEach(checkbox => {
-                    if (!valoresSeleccionados.has(checkbox.value)) {
-                        todasReprobadasIncluidas = false;
-                    }
-                });
+                console.log("Valores seleccionados recopilados (Set):", Array.from(selectedValues));
 
-                if (!todasReprobadasIncluidas) {
-                    mostrarToast('danger', 'Debes seleccionar todas las asignaturas reprobadas obligatorias.');
+                // --- Client-side Validations ---
+                const finalCount = selectedValues.size;
+
+                let allReprobadasIncluded = true;
+                if (reprobadasObligatorias) {
+                    reprobadasObligatorias.forEach(checkbox => {
+                        // Check if a reprobated checkbox exists and is not checked (if it's not disabled, it should be checked)
+                        // If it's disabled, its value should be in selectedValues due to the explicit addition above
+                        if (!checkbox.checked && !checkbox.disabled) { // If it's *not* disabled and *not* checked, it's an error.
+                            allReprobadasIncluded = false;
+                        }
+                        // For disabled checkboxes, we ensure they are in the selectedValues set.
+                        // The HTML uses <input type="hidden" name="selected_asignaturas[]"> for reprobadas,
+                        // and a disabled checkbox. The hidden input guarantees submission.
+                        // However, for consistency and explicit validation, we check that their values are in `selectedValues`.
+                        if (checkbox.disabled && !selectedValues.has(checkbox.value)) {
+                            allReprobadasIncluded = false; // Should not happen with the explicit addition above, but good for validation
+                        }
+                    });
+                }
+
+
+                if (!allReprobadasIncluded) {
+                    showToast('danger', 'Debes seleccionar todas las asignaturas reprobadas obligatorias.');
                     console.warn("Fallo de validación: Faltan asignaturas reprobadas obligatorias.");
                     return;
                 }
 
-                if (contadorFinal === 0) {
-                    mostrarToast('danger', 'Por favor, selecciona al menos una asignatura para inscribirte.');
+                if (finalCount === 0) {
+                    showToast('danger', 'Por favor, selecciona al menos una asignatura para inscribirte.');
                     console.warn("Fallo de validación: No se ha seleccionado ninguna asignatura.");
                     return;
                 }
 
-                if (contadorFinal > 6) {
-                    mostrarToast('danger', 'No puedes inscribirte en más de 6 asignaturas por semestre (incluyendo las reprobadas).');
+                if (finalCount > 6) {
+                    showToast('danger', 'No puedes inscribirte en más de 6 asignaturas por semestre (incluyendo las reprobadas).');
                     console.warn("Fallo de validación: Demasiadas asignaturas seleccionadas.");
                     return;
                 }
 
                 console.log("Validaciones del lado del cliente pasadas. Construyendo FormData para el envío.");
 
-                const datosFormulario = new FormData();
-                Array.from(valoresSeleccionados).forEach(valor => {
-                    datosFormulario.append('selected_asignaturas[]', valor);
-                    console.log(`Añadiendo a FormData para envío: selected_asignaturas[] = ${valor}`);
+                const formData = new FormData();
+                Array.from(selectedValues).forEach(value => {
+                    formData.append('selected_asignaturas[]', value);
+                    console.log(`Añadiendo a FormData para envío: selected_asignaturas[] = ${value}`);
                 });
 
-                // Enviar la solicitud usando la API Fetch
-                const respuesta = await fetch('../api/inscripciones.php', { // Este endpoint manejará la inscripción real
+                // Send the request using Fetch API
+                const response = await fetch('../api/inscripciones.php', { // This endpoint will handle the actual enrollment
                     method: 'POST',
-                    body: datosFormulario
+                    body: formData
                 });
 
-                if (!respuesta.ok) {
-                    const textoError = await respuesta.text();
-                    console.error("Error en la respuesta HTTP:", textoError);
-                    throw new Error(`Error HTTP: ${respuesta.status} - ${respuesta.statusText}. Respuesta: ${textoError.substring(0, 100)}...`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error("Error en la respuesta HTTP:", errorText);
+                    throw new Error(`Error HTTP: ${response.status} - ${response.statusText}. Respuesta: ${errorText.substring(0, 100)}...`);
                 }
 
-                const resultado = await respuesta.json();
+                const result = await response.json();
 
-                console.log("Respuesta del servidor:", resultado);
+                console.log("Respuesta del servidor:", result);
 
-                if (resultado.success) {
-                    mostrarToast('success', resultado.message);
-                    const modal = bootstrap.Modal.getInstance(modalInscripcion);
+                if (result.exito) {
+                    showToast('success', result.mensaje);
+                    const modal = bootstrap.Modal.getInstance(enrollmentModal);
                     if (modal) modal.hide();
                     setTimeout(() => {
                         window.location.reload();
-                    }, 1000);
+                    }, 1000); // Reload the page after 1 second to show updated data
                 } else {
-                    mostrarToast('danger', resultado.message);
+                    showToast('danger', result.mensaje);
                 }
 
             } catch (error) {
                 console.error("Error durante el envío del formulario con Fetch:", error);
-                mostrarToast('danger', `Ocurrió un error inesperado al procesar la solicitud. Por favor, inténtalo de nuevo. Detalle: ${error.message}`);
+                showToast('danger', `Ocurrió un error inesperado al procesar la solicitud. Por favor, inténtalo de nuevo. Detalle: ${error.mensaje}`);
             } finally {
-                if (botonEnviarInscripcion) {
-                    botonEnviarInscripcion.removeAttribute('disabled');
-                    botonEnviarInscripcion.innerHTML = 'Enviar Solicitud';
+                if (submitEnrollmentBtn) {
+                    submitEnrollmentBtn.removeAttribute('disabled');
+                    submitEnrollmentBtn.innerHTML = 'Enviar Solicitud';
                 }
             }
         });
     }
 
-
-    // Función para manejar el filtrado de asignaturas dentro del modal
-    function filtrarAsignaturas() {
-        if (!filtroCurso || !filtroSemestre || !filtroBusqueda || !listaAsignaturasDisponibles || !mensajeSinResultados) {
-            console.warn('Elementos de filtro o lista de asignaturas no encontrados. El contenido de AJAX puede no haberse cargado todavía.');
+    // Function to handle filtering assignments within the modal
+    function filterAsignaturas() {
+        // Check if elements are available, they should be after initializeModalContent runs
+        if (!filterCourse || !filterSemester || !filterSearch || !availableAsignaturasList || !noResultsMessage) {
+            console.warn('Filter elements or assignment list not found. AJAX content may not have loaded yet in filterAsignaturas.');
             return;
         }
 
-        const cursoSeleccionado = filtroCurso.value.toLowerCase();
-        const semestreSeleccionado = filtroSemestre.value.toLowerCase();
-        const terminoBusqueda = filtroBusqueda.value.toLowerCase();
+        const selectedCourse = filterCourse.value.toLowerCase();
+        const selectedSemester = filterSemester.value.toLowerCase();
+        const searchTerm = filterSearch.value.toLowerCase();
 
-        let contadorVisible = 0;
-        const itemsAsignatura = listaAsignaturasDisponibles.querySelectorAll('.asignatura-item');
+        let visibleRegularItemsCount = 0;
+        const allAsignaturaItems = availableAsignaturasList.querySelectorAll('.asignatura-item');
 
-        itemsAsignatura.forEach(item => {
-            const nombreCurso = item.dataset.course.toLowerCase();
-            const numeroSemestre = item.dataset.semester.toLowerCase();
-            const nombreAsignatura = item.dataset.name.toLowerCase();
-            const esReprobada = item.classList.contains('reprobada-obligatoria'); // Verificar si es una asignatura reprobada
+        // First, handle reprobated items (always visible unless the filter specifically hides them, which we prevent)
+        // Note: The HTML structure has reprobated items outside 'availableAsignaturasList'
+        //       so we need to query them separately if they are to be included in filtering logic.
+        //       However, based on your current HTML, 'reprobada-obligatoria' class is on the LABEL, not on the checkbox directly.
+        //       And these are *not* within the '#availableAsignaturasList'.
+        //       So, the filter should only apply to items *within* '#availableAsignaturasList'.
+        //       Reprobated subjects in the dedicated 'Asignaturas Reprobadas (Obligatorias)' section
+        //       are handled separately and are always displayed.
 
-            const coincideCurso = cursoSeleccionado === '' || nombreCurso.includes(cursoSeleccionado);
-            const coincideSemestre = semestreSeleccionado === '' || numeroSemestre.includes(semestreSeleccionado);
-            const coincideBusqueda = terminoBusqueda === '' || nombreAsignatura.includes(terminoBusqueda);
+        // Re-get all subject items in the entire modal body that are part of the 'available' list
+        // and are not explicitly the 'reprobada-obligatoria' label elements.
+        const filterableAsignaturaItems = document.querySelectorAll('#availableAsignaturasList .asignatura-item');
 
-            // Las asignaturas reprobadas siempre son visibles, independientemente de los filtros, ya que son obligatorias
-            if (esReprobada) {
+        filterableAsignaturaItems.forEach(item => {
+            const courseName = item.dataset.course ? item.dataset.course.toLowerCase() : '';
+            const semesterNumber = item.dataset.semester ? item.dataset.semester.toLowerCase() : '';
+            const asignaturaName = item.dataset.name ? item.dataset.name.toLowerCase() : '';
+
+            const courseMatch = selectedCourse === '' || courseName.includes(selectedCourse);
+            const semesterMatch = selectedSemester === '' || semesterNumber.includes(selectedSemester);
+            const searchMatch = searchTerm === '' || asignaturaName.includes(searchTerm);
+
+            if (courseMatch && semesterMatch && searchMatch) {
                 item.style.display = 'flex';
-                contadorVisible++;
-            } else if (coincideCurso && coincideSemestre && coincideBusqueda) {
-                item.style.display = 'flex';
-                contadorVisible++;
+                visibleRegularItemsCount++;
             } else {
                 item.style.display = 'none';
             }
         });
 
-        // Mostrar u ocultar el mensaje de "sin resultados"
-        if (contadorVisible === 0 && itemsAsignatura.length > 0) {
-            mensajeSinResultados.textContent = 'No se encontraron asignaturas que coincidan con los filtros aplicados.';
-            mensajeSinResultados.style.display = 'block';
+        // Show or hide the "no results" message
+        // This message should only appear if the filters hid all *filterable* items.
+        // Reprobated mandatory subjects are not filterable in this context (they are always shown).
+        if (visibleRegularItemsCount === 0 && filterableAsignaturaItems.length > 0) {
+            noResultsMessage.textContent = 'No se encontraron asignaturas que coincidan con los filtros aplicados.';
+            noResultsMessage.style.display = 'block';
         } else {
-            mensajeSinResultados.style.display = 'none';
+            noResultsMessage.style.display = 'none';
         }
     }
 
-    // --- Event Listeners Globales ---
+    // --- Global Event Listeners ---
 
     document.addEventListener('DOMContentLoaded', function () {
-        // Manejar mensajes flash
-        mensajesFlash.forEach(msg => {
-            mostrarToast(msg.type, msg.message);
+        // Show any initial flash messages
+        flashMessages.forEach(msg => {
+            showToast(msg.type, msg.message);
         });
+
+        // Load modal content via AJAX when the modal is shown
+        if (enrollmentModal) {
+            enrollmentModal.addEventListener('show.bs.modal', async function () {
+                const modalBody = document.getElementById('modalContentContainer');
+                // Display loading spinner
+                modalBody.innerHTML = `
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Cargando...</span>
+                        </div>
+                        <p>Cargando asignaturas disponibles...</p>
+                    </div>
+                `;
+                // Ensure the submit button is disabled initially while content loads
+                if (submitEnrollmentBtn) {
+                    submitEnrollmentBtn.setAttribute('disabled', 'disabled');
+                }
+
+                try {
+                    // Fetch the actual modal content (filters and subject list)
+                    // Ensure these PHP variables are defined in the main PHP page before this script runs.
+                    // Example: $id_estudiante_actual, $id_curso_actual_estudiante, etc.
+                    const response = await fetch(`../api/modal_inscripciones_asignaturas.php?id_estudiante=<?= $id_estudiante_actual ?>&id_curso_actual_estudiante=<?= $id_curso_actual_estudiante ?>&numero_semestre_actual_estudiante_en_curso=<?= $numero_semestre_actual_en_curso ?>&id_semestre_actual_inscripcion=<?= $current_semester['id'] ?>`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.text();
+                    modalBody.innerHTML = data; // Insert fetched content
+
+                    initializeModalContent(); // Re-initialize elements and listeners after new content is loaded
+
+                } catch (error) {
+                    console.error("Error al cargar el contenido del modal:", error);
+                    modalBody.innerHTML = `<div class="alert alert-danger">Error al cargar las asignaturas: ${error.message}. Por favor, intente de nuevo.</div>`;
+                    if (submitEnrollmentBtn) {
+                        submitEnrollmentBtn.setAttribute('disabled', 'disabled');
+                    }
+                }
+            });
+        }
     });
+
 </script>

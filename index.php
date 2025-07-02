@@ -7,14 +7,19 @@ require_once 'config/database.php';
 // Asumo que este script está en la raíz de tu proyecto (ej. htdocs/departamento_ig/index.php)
 // y que la carpeta 'uploads' está al mismo nivel.
 // Si este script está en un subdirectorio (ej. 'public/index.php'), ajusta la ruta a '../uploads/'.
-$upload_base_url = 'uploads/'; 
+$upload_base_url = ''; 
 
 $logo = '';
 $img = '';
 $info = [];
-
+// --- Carga de Anuncios (Publicaciones) ---
+$anuncios = [];
+$requisitos = [];
 // --- Carga de Información del Departamento ---
 try {
+    $stmt = $pdo->query("SELECT * FROM requisitos_matricula ");
+    $requisitos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
     $stmt = $pdo->query("SELECT * FROM departamento LIMIT 1");
     $info = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -41,8 +46,7 @@ try {
     $img = $upload_base_url . 'default_image.png';
 }
 
-// --- Carga de Anuncios (Publicaciones) ---
-$anuncios = [];
+
 try {
     $anuncios = $pdo->query("SELECT * FROM publicaciones WHERE visible = 1 ORDER BY creado_en DESC")->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -706,7 +710,7 @@ try {
             información para el desarrollo del país.</p>
         </div>
         <div class="col-lg-6 text-center" data-aos="fade-left">
-          <img src="img/code.png" alt="Desarrollo" style="width: 80%; max-width: 450px;" class="img-fluid">
+          <img src="img/eua.jpg" alt="Desarrollo" style="width: 80%; max-width: 450px;" class="img-fluid">
         </div>
       </div>
     </div>
@@ -794,42 +798,49 @@ try {
     </section>
   <?php endif; ?>
 
-  <!-- Seccion anuncios -->
-  <?php if (!empty($anuncios)): ?>
-    <section id="noticias" class="py-5 bg-light">
-
+<?php if (!empty($anuncios)): ?>
+  <section id="noticias" class="py-5 bg-light">
+    <div class="container">
       <h2 class="text-center mb-5 text-primary-emphasis" data-aos="fade-up">
         <i class="bi bi-megaphone-fill me-2"></i> Tablón de Anuncios
       </h2>
-      <?php foreach ($anuncios as $a): ?>
-        <div class="card anuncio-card mb-4" data-aos="fade-up" data-aos-delay="100">
 
-          <div class="card-body">
-            <h4 class="card-title text-primary"><?= htmlspecialchars($a['titulo']) ?></h4>
+      <div class="row">
+        <?php foreach ($anuncios as $a): ?>
+          <div class="col-md-6 col-lg-4 mb-4" data-aos="fade-up" data-aos-delay="100">
+            <div class="card h-100 shadow-sm border-0 rounded-4">
+              <?php if ($a['imagen']): ?>
+                <a href="<?= htmlspecialchars($a['imagen']) ?>" target="_blank" class="d-block">
+                  <img src="<?= htmlspecialchars($a['imagen']) ?>" alt="Imagen del anuncio" class="card-img-top rounded-top-4 img-fluid" style="max-height: 220px; object-fit: cover;">
+                </a>
+              <?php endif; ?>
 
-            <div class="d-flex justify-content-between align-items-center anuncio-meta mb-2">
-              <span><i class="bi bi-tag-fill me-1"></i><?= ucfirst(htmlspecialchars($a['tipo'])) ?></span>
-              <span><i class="bi bi-calendar-check me-1"></i><?= date('d/m/Y', strtotime($a['creado_en'])) ?></span>
+              <div class="card-body d-flex flex-column">
+                <h5 class="card-title fw-bold text-primary"><?= htmlspecialchars($a['titulo']) ?></h5>
+
+                <div class="mb-2 small text-muted d-flex justify-content-between">
+                  <span><i class="bi bi-tag-fill me-1"></i><?= ucfirst(htmlspecialchars($a['tipo'])) ?></span>
+                  <span><i class="bi bi-calendar-check me-1"></i><?= date('d/m/Y', strtotime($a['creado_en'])) ?></span>
+                </div>
+
+                <p class="card-text flex-grow-1"><?= nl2br(htmlspecialchars($a['contenido'])) ?></p>
+
+                <?php if ($a['archivo_adjunto']): ?>
+                  <div class="mt-3">
+                    <a href="<?= htmlspecialchars($a['archivo_adjunto']) ?>" class="btn btn-sm btn-outline-primary w-100" target="_blank" rel="noopener">
+                      <i class="bi bi-file-earmark-arrow-down me-1"></i> Descargar archivo adjunto
+                    </a>
+                  </div>
+                <?php endif; ?>
+              </div>
             </div>
-
-            <?php if ($a['imagen']): ?>
-              <img src="api/<?= htmlspecialchars($a['imagen']) ?>" alt="Imagen del anuncio"
-                class="img-fluid anuncio-img mb-3 w-100">
-            <?php endif; ?>
-
-            <p class="anuncio-contenido"><?= nl2br(htmlspecialchars($a['contenido'])) ?></p>
-
-            <?php if ($a['archivo_adjunto']): ?>
-              <a href="<?= htmlspecialchars($a['archivo_adjunto']) ?>" class="btn btn-outline-primary btn-sm mt-3"
-                target="_blank" rel="noopener">
-                <i class="bi bi-download me-1"></i> Descargar documento
-              </a>
-            <?php endif; ?>
           </div>
-        </div>
-      <?php endforeach; ?>
-    </section>
-  <?php endif; ?>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </section>
+<?php endif; ?>
+
 
   <!-- requisitos matricula -->
 
@@ -872,7 +883,7 @@ try {
           <!-- Imagen: ocupa todo el alto del contenedor -->
           <div class="col-md-6 p4">
             <div class="h-100">
-              <img src="api/<?= htmlspecialchars($info['imagen']) ?>" alt="Imagen del Departamento"
+              <img src="<?= htmlspecialchars($info['imagen']) ?>" alt="Imagen del Departamento"
                 class="img-fluid h-100 w-100 object-fit-cover rounded-4 shadow">
             </div>
           </div>
