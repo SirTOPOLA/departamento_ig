@@ -71,118 +71,154 @@ $stmt = $pdo->prepare("SELECT ha.nota_final, ha.estado_final, a.nombre_asignatur
 $stmt->execute([':id_estudiante' => $estudiante_id]);
 $ultimas_notas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
+<div class="container my-5">
+  <h2 class="text-center mb-4 fw-bold text-primary">
+    <i class="bi bi-mortarboard-fill me-2"></i>Panel del Estudiante
+  </h2>
 
-<div class="content" id="content">
-    <div class="container py-5">
-        <h2 class="mb-4"><i class="bi bi-person-circle"> </i> <?=$page_title?></h2>
+  <div class="row g-4">
 
-        <div class="row">
-            <!-- Datos Personales -->
-            <div class="col-md-6 mb-4">
-                <div class="card border-start border-success border-4 shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title text-success"><i class="bi bi-person-badge"></i> Mis Datos</h5>
-                        <p><strong>Nombre:</strong> <?= $estudiante_info['nombre_completo'] ?><br>
-                        <strong>Código:</strong> <?= $estudiante_info['codigo_registro'] ?><br>
-                        <strong>Email:</strong> <?= $estudiante_info['email'] ?><br>
-                        <strong>Tel.:</strong> <?= $estudiante_info['telefono'] ?? 'N/A' ?><br>
-                        <strong>Año:</strong> <?= $current_anio_nombre ?><br>
-                        <strong>Semestre:</strong> <?= $current_semestre_numero ?> (<?= $current_curso_nombre ?>)</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Estado Académico -->
-            <div class="col-md-6 mb-4">
-                <div class="card border-start border-warning border-4 shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title text-warning"><i class="bi bi-graph-up"></i> Estado Académico</h5>
-                        <p><strong>Asignaturas inscritas:</strong> <?= $total_asignaturas_inscritas ?><br>
-                        <strong>Notas recientes:</strong> <?= count($ultimas_notas) ?><br>
-                        <strong>Clases hoy:</strong> <?= count($proximas_clases_hoy) ?></p>
-                    </div>
-                </div>
-            </div>
-
-           <!-- Información de Horario -->
-<div class="col-md-4 mb-4">
-    <div class="card border-start border-primary border-4 shadow-sm">
+    <!-- Información personal -->
+    <div class="col-lg-6">
+      <div class="card shadow-sm border-start border-success border-4 rounded-4">
         <div class="card-body">
-            <h5 class="card-title text-primary"><i class="bi bi-calendar-week"></i> Horario</h5>
-            <p class="card-text">Puedes consultar tu horario semanal completo desde la sección de clases.</p>
-            <p class="text-muted small">Última actualización: <?= date('d/m/Y') ?></p>
+          <h5 class="card-title text-success"><i class="bi bi-person-badge-fill me-1"></i>Mis Datos</h5>
+          <ul class="list-unstyled mb-0">
+            <li><strong>Nombre:</strong> <?= $estudiante_info['nombre_completo'] ?></li>
+            <li><strong>Código:</strong> <?= $estudiante_info['codigo_registro'] ?></li>
+            <li><strong>Email:</strong> <?= $estudiante_info['email'] ?></li>
+            <li><strong>Tel.:</strong> <?= $estudiante_info['telefono'] ?? 'N/A' ?></li>
+            <li><strong>Año:</strong> <?= $current_anio_nombre ?></li>
+            <li><strong>Semestre:</strong> <?= $current_semestre_numero ?> (<?= $current_curso_nombre ?>)</li>
+          </ul>
         </div>
+      </div>
     </div>
-</div>
 
-<!-- Información de Inscripción -->
-<div class="col-md-4 mb-4">
-    <div class="card border-start border-primary border-4 shadow-sm">
+    <!-- Estado académico -->
+    <div class="col-lg-6">
+      <div class="card shadow-sm border-start border-warning border-4 rounded-4">
         <div class="card-body">
-            <h5 class="card-title text-primary"><i class="bi bi-pencil-square"></i> Inscripción</h5>
-            <p class="card-text">Tienes <?= $total_asignaturas_inscritas ?> asignaturas confirmadas este semestre.</p>
-            <p class="text-muted small">Consulta con coordinación para más detalles.</p>
+          <h5 class="card-title text-warning"><i class="bi bi-bar-chart-line-fill me-1"></i>Estado Académico</h5>
+          <ul class="list-unstyled mb-0">
+            <li><strong>Asignaturas inscritas:</strong> <?= $total_asignaturas_inscritas ?></li>
+            <li><strong>Clases programadas hoy:</strong> <?= count($proximas_clases_hoy) ?></li>
+            <li><strong>Notas recientes:</strong> <?= count($ultimas_notas) ?></li>
+          </ul>
         </div>
+      </div>
     </div>
-</div>
 
-<!-- Información de Asignaturas -->
-<div class="col-md-4 mb-4">
-    <div class="card border-start border-primary border-4 shadow-sm">
+    <!-- Próximas clases -->
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-start border-info border-4 rounded-4">
         <div class="card-body">
-            <h5 class="card-title text-primary"><i class="bi bi-book"></i> Mis Asignaturas</h5>
-            <p class="card-text">Tu carga académica está actualizada.</p>
-            <p class="text-muted small">Asignaturas confirmadas: <?= $total_asignaturas_inscritas ?></p>
+          <h5 class="card-title text-info"><i class="bi bi-clock-history me-1"></i>Próximas Clases Hoy (<?= $dia_nombre ?>)</h5>
+          <?php if ($proximas_clases_hoy): ?>
+            <div class="list-group list-group-flush">
+              <?php foreach ($proximas_clases_hoy as $clase): ?>
+                <div class="list-group-item">
+                  <div class="d-flex justify-content-between fw-bold">
+                    <?= substr($clase['hora_inicio'], 0, 5) ?> - <?= substr($clase['hora_fin'], 0, 5) ?>
+                    <span class="text-muted small"><?= $clase['turno'] ?> • <?= $clase['nombre_aula'] ?></span>
+                  </div>
+                  <div><?= $clase['nombre_asignatura'] ?> – <?= $clase['nombre_curso'] ?><br><small class="text-muted">Profesor: <?= $clase['profesor_nombre'] ?></small></div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          <?php else: ?>
+            <p class="text-muted">No tienes clases programadas para hoy.</p>
+          <?php endif; ?>
         </div>
+      </div>
     </div>
+
+    <!-- Últimas notas -->
+    <div class="col-lg-4">
+      <div class="card shadow-sm border-start border-success border-4 rounded-4">
+        <div class="card-body">
+          <h5 class="card-title text-success"><i class="bi bi-clipboard-check me-1"></i>Últimas Notas</h5>
+          <?php if ($ultimas_notas): ?>
+            <ul class="list-group list-group-flush">
+              <?php foreach ($ultimas_notas as $nota): ?>
+                <li class="list-group-item d-flex justify-content-between">
+                  <div>
+                    <strong><?= $nota['nombre_asignatura'] ?></strong><br>
+                    <small>Semestre <?= $nota['numero_semestre'] ?></small>
+                  </div>
+                  <span class="badge bg-<?= $nota['estado_final'] == 'APROBADO' ? 'success' : 'danger' ?>">
+                    <?= $nota['nota_final'] ?>
+                  </span>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+            <a href="historial_academico.php" class="btn btn-outline-success btn-sm mt-2 w-100">Ver todas</a>
+          <?php else: ?>
+            <p class="text-muted">No hay notas recientes.</p>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel inferior (resumen accesos) -->
+    <div class="col-md-4">
+      <div class="card border-start border-primary border-4 shadow-sm">
+        <div class="card-body">
+          <h6 class="card-title text-primary"><i class="bi bi-calendar-week"></i> Horario Semanal</h6>
+          <p class="text-muted mb-1">Consulta tu horario completo en la sección de clases.</p>
+          <small>Última actualización: <?= date('d/m/Y') ?></small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card border-start border-primary border-4 shadow-sm">
+        <div class="card-body">
+          <h6 class="card-title text-primary"><i class="bi bi-pencil-square"></i> Inscripción</h6>
+          <p class="text-muted mb-1">Asignaturas confirmadas: <?= $total_asignaturas_inscritas ?></p>
+          <small>Consulta con coordinación académica si hay cambios.</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card border-start border-primary border-4 shadow-sm">
+        <div class="card-body">
+          <h6 class="card-title text-primary"><i class="bi bi-book"></i> Asignaturas</h6>
+          <p class="text-muted mb-1">Carga académica actualizada.</p>
+          <small>Corrobora en tu plan de estudios oficial.</small>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 
-            <!-- Clases de hoy -->
-            <div class="col-md-8 mb-4">
-                <div class="card border-start border-info border-4 shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title text-info"><i class="bi bi-hourglass-split"></i> Próximas Clases Hoy (<?= $dia_nombre ?>)</h5>
-                        <?php if ($proximas_clases_hoy): ?>
-                            <ul class="list-group list-group-flush">
-                                <?php foreach ($proximas_clases_hoy as $clase): ?>
-                                    <li class="list-group-item">
-                                        <strong><?= substr($clase['hora_inicio'], 0, 5) ?> - <?= substr($clase['hora_fin'], 0, 5) ?></strong><br>
-                                        <?= $clase['nombre_asignatura'] ?> (<?= $clase['nombre_curso'] ?> - <?= ucfirst($clase['turno']) ?>)<br>
-                                        Profesor: <?= $clase['profesor_nombre'] ?> | Aula: <?= $clase['nombre_aula'] ?>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
-                        <?php else: ?>
-                            <p class="text-muted">No tienes clases programadas para hoy.</p>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Últimas Notas -->
-            <div class="col-md-4 mb-4">
-                <div class="card border-start border-success border-4 shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title text-success"><i class="bi bi-clipboard-check"></i> Últimas Notas</h5>
-                        <?php if ($ultimas_notas): ?>
-                            <ul class="list-group list-group-flush">
-                                <?php foreach ($ultimas_notas as $nota): ?>
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        <span><?= $nota['nombre_asignatura'] ?><br><small>Sem. <?= $nota['numero_semestre'] ?></small></span>
-                                        <span class="badge bg-<?= $nota['estado_final'] == 'APROBADO' ? 'success' : 'danger' ?>"><?= $nota['nota_final'] ?></span>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
-                            <a href="historial_academico.php" class="btn btn-outline-success btn-sm mt-2">Ver todas</a>
-                        <?php else: ?>
-                            <p class="text-muted">No hay notas recientes.</p>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
+<style>
+    .card-title {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.card ul li {
+  margin-bottom: 0.5rem;
+}
+
+.card {
+  transition: transform 0.2s ease-in-out;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+}
+
+.badge {
+  font-size: 1rem;
+  padding: 0.5em 0.75em;
+  border-radius: 0.5rem;
+}
+
+</style>
 <?php include_once '../includes/footer.php'; ?>

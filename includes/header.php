@@ -76,9 +76,9 @@
                         <a href="../estudiantes/index.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'index.php' && $current_folder == 'estudiantes') ? 'active' : ''; ?>">
     <i class="fas fa-home me-2"></i> Panel Principal
 </a>
-<a href="../estudiantes/horarios.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'horarios.php') ? 'active' : ''; ?>">
+<!-- <a href="../estudiantes/horarios.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'horarios.php') ? 'active' : ''; ?>">
     <i class="fas fa-calendar-day me-2"></i> Mi Horario
-</a>
+</a> -->
 <a href="../estudiantes/inscripciones.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'inscripciones.php') ? 'active' : ''; ?>">
     <i class="fas fa-user-check me-2"></i> Inscripción
 </a>
@@ -102,9 +102,9 @@
 <a href="../profesores/asignaturas_asignadas.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'asignaturas_asignadas.php') ? 'active' : ''; ?>">
     <i class="fas fa-users me-2"></i> Mis Asignaturas
 </a>
-<!-- <a href="../profesores/upload_cv.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'upload_cv.php') ? 'active' : ''; ?>">
-    <i class="fas fa-file-upload me-2"></i> Subir CV
-</a> -->
+<a href="../profesores/sugerencias.php" class="list-group-item list-group-item-action bg-dark text-white <?= ($current_page == 'sugerencias.php') ? 'active' : ''; ?>">
+    <i class="fas fa-file-upload me-2"></i> Mis Sugerencias
+</a>
 
                     <?php endif; ?>
                 <?php endif; ?>

@@ -74,23 +74,45 @@ $flash_messages = get_flash_messages();
 $current_enrollments = [];
 if ($current_semester) {
     $stmt_current_enrollments = $pdo->prepare("
-        SELECT
-            ie.id_asignatura,
-            a.nombre_asignatura,
-            a.creditos,
-            c.nombre_curso,
-            a.semestre_recomendado AS numero_semestre_asignatura,
-            s.numero_semestre AS semestre_actual_numero,
-            aa.nombre_anio,
-            ie.confirmada
-        FROM inscripciones_estudiantes ie
-        JOIN asignaturas a ON ie.id_asignatura = a.id
-        LEFT JOIN cursos c ON a.id_curso = c.id
-        JOIN semestres s ON ie.id_semestre = s.id
-        JOIN anios_academicos aa ON s.id_anio_academico = aa.id
-        WHERE ie.id_estudiante = :id_estudiante
-        AND ie.id_semestre = :id_semestre_actual_inscripcion
-        ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC
+      SELECT
+    ie.id_asignatura,
+    ie.id,
+    a.nombre_asignatura,
+    a.creditos,
+    ie.id_horario,
+    ie.id_semestre,
+    c.nombre_curso,
+    a.semestre_recomendado AS numero_semestre_asignatura,
+    s.numero_semestre AS semestre_actual_numero, 
+    s.id AS id_semestre,
+    aa.nombre_anio,
+    ie.confirmada,
+
+    -- Datos del horario
+    h.dia_semana,
+    h.hora_inicio,
+    h.hora_fin,
+    h.turno,
+    
+    -- Nombre del profesor
+    u.nombre_completo AS nombre_profesor
+
+FROM inscripciones_estudiantes ie
+JOIN asignaturas a ON ie.id_asignatura = a.id
+LEFT JOIN cursos c ON a.id_curso = c.id
+JOIN semestres s ON ie.id_semestre = s.id
+JOIN anios_academicos aa ON s.id_anio_academico = aa.id
+
+-- Nuevas relaciones para obtener horario y profesor
+LEFT JOIN horarios h ON ie.id_horario = h.id
+LEFT JOIN profesores p ON h.id_profesor = p.id
+LEFT JOIN usuarios u ON p.id_usuario = u.id
+
+WHERE ie.id_estudiante = :id_estudiante
+  AND ie.id_semestre = :id_semestre_actual_inscripcion
+
+ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC;
+
     ");
     $stmt_current_enrollments->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
     $stmt_current_enrollments->bindParam(':id_semestre_actual_inscripcion', $current_semester['id'], PDO::PARAM_INT);
@@ -119,6 +141,7 @@ if ($current_semester) { // Only if there's an active semester for enrollment
             a.nombre_asignatura,
             a.creditos,
             c.nombre_curso,
+             s.id AS id_semestre,
             a.semestre_recomendado AS numero_semestre_asignatura,
             s.numero_semestre AS semestre_historial_numero,
             aa.nombre_anio
@@ -212,10 +235,10 @@ if ($current_semester) {
             <i class="fas fa-plus-circle me-2"></i> Inscribirme en Asignaturas
         </button>
     </div>
-    
 
 
-        <div class="card shadow-sm mb-4">
+
+    <div class="card shadow-sm mb-4">
         <div class="card-header bg-primary text-white">
             <h5 class="mb-0">Tus Asignaturas Inscritas para el Semestre Actual</h5>
         </div>
@@ -259,27 +282,27 @@ if ($current_semester) {
                                             <?php endif; ?>
                                         </td>
                                         <td>
-    <?php if (empty($enrollment['confirmada'])): ?>
-        <button type="button" class="btn btn-sm btn-info select-horario-btn"
-            data-bs-toggle="modal" data-bs-target="#selectHorarioModal"
-            data-enrollment-id="<?= (int) ($enrollment['id'] ?? 0) ?>"
-            data-subject-id="<?= (int) ($enrollment['id_asignatura'] ?? 0) ?>"
-            data-semestre-id="<?= (int) ($current_semester['id_semestre'] ?? 0) ?>"
-            id="select-btn-<?= (int) ($enrollment['id'] ?? 0) ?>">
-            <i class="fas fa-clock me-1"></i> Elegir Turno
-        </button>
-    <?php else: ?>
-        <span class="text-muted" id="select-btn-<?= (int) ($enrollment['id'] ?? 0) ?>">Turno Asignado</span>
-        <div id="horario-info-<?= (int) ($enrollment['id'] ?? 0) ?>" style="display:block;">
-            <small class="text-muted">
-                Profesor: <?= htmlspecialchars($enrollment['nombre_profesor'] ?? 'N/A') ?><br>
-                Turno: <?= htmlspecialchars($enrollment['turno'] ?? 'N/A') ?> (<?= htmlspecialchars(substr($enrollment['hora_inicio'] ?? '', 0, 5)) ?> - <?= htmlspecialchars(substr($enrollment['hora_fin'] ?? '', 0, 5)) ?>)<br>
-                Día: <?= htmlspecialchars($enrollment['dia_semana'] ?? 'N/A') ?><br>
-                Aula: <?= htmlspecialchars($enrollment['nombre_aula'] ?? 'N/A') ?>
-            </small>
-        </div>
-    <?php endif; ?>
-</td>
+                                            <?php if (empty($enrollment['id_horario'])): ?>
+                                                <button type="button" class="btn btn-sm btn-info select-horario-btn" data-bs-toggle="modal"
+                                                    data-bs-target="#selectHorarioModal"
+                                                    data-enrollment-id="<?= (int) ($enrollment['id'] ?? 0) ?>"
+                                                    data-subject-id="<?= (int) ($enrollment['id_asignatura'] ?? 0) ?>"
+                                                    data-semestre-id="<?= (int) ($enrollment['id_semestre']  ?? 0) ?>"
+                                                    id="select-btn-<?= (int) ($enrollment['id'] ?? 0) ?>">
+                                                    <i class="fas fa-clock me-1"></i> Elegir Turno
+                                                </button>
+                                                <?php else: ?>
+                        <span class="text-muted" id="select-btn-<?= (int) ($enrollment['id'] ?? 0) ?>">Turno Asignado</span>
+                        <div id="horario-info-<?= (int) ($enrollment['id'] ?? 0) ?>" style="display:block;">
+                            <small class="text-muted">
+                                Profesor: <?= htmlspecialchars($enrollment['nombre_profesor'] ?? '-') ?><br>
+                                Turno: <?= htmlspecialchars($enrollment['turno'] ?? '-') ?> (<?= htmlspecialchars(substr($enrollment['hora_inicio'] ?? '', 0, 5)) ?> - <?= htmlspecialchars(substr($enrollment['hora_fin'] ?? '', 0, 5)) ?>)<br>
+                                Día: <?= htmlspecialchars($enrollment['dia_semana'] ?? '-') ?><br>
+                                Aula: <?= htmlspecialchars($enrollment['nombre_aula'] ?? '-') ?>
+                            </small>
+                        </div>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
@@ -300,32 +323,9 @@ if ($current_semester) {
     </div>
 
 
-
-
-        
     </div>
 
-    <div class="modal fade" id="selectHorarioModal" tabindex="-1" aria-labelledby="selectHorarioModalLabel"
-        aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="selectHorarioModalLabel">Seleccionar Turno y Profesor</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="horarios-list-container">
-                        <p class="text-muted text-center">Cargando horarios disponibles...</p>
-                    </div>
-                    <input type="hidden" id="modal-enrollment-id">
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
 
     <?php if ($current_semester): ?>
@@ -368,175 +368,238 @@ if ($current_semester) {
 
 <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
 </div>
+<div class="modal fade" id="selectHorarioModal" tabindex="-1" aria-labelledby="selectHorarioModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="selectHorarioModalLabel"><i class="fas fa-calendar-alt me-2"></i> Elegir
+                    Turno y Profesor</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modal-enrollment-id">
 
-<?php include_once '../includes/footer.php'; ?>
+                <div id="horarios-list-container">
+                    <p class="text-muted text-center">Selecciona una asignatura para ver los horarios disponibles.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Función para mostrar alertas de forma consistente en el modal
+        function mostrarAlerta(mensaje, tipo = 'danger') {
+            const contenedorAlerta = document.querySelector('.modal-body');
 
-        // Función auxiliar para mostrar alertas de forma consistente
-        function showAlert(message, type = 'danger') {
-            const alertContainer = document.createElement('div');
-            alertContainer.className = `alert alert-${type} alert-dismissible fade show mt-3`;
-            alertContainer.setAttribute('role', 'alert');
-            alertContainer.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            // Elimina cualquier alerta existente antes de mostrar una nueva
+            const alertaExistente = contenedorAlerta.querySelector('.alert');
+            if (alertaExistente) {
+                alertaExistente.remove();
+            }
+
+            // Crea una nueva alerta
+            const nuevaAlerta = document.createElement('div');
+            nuevaAlerta.className = `alert alert-${tipo} alert-dismissible fade show mt-3`;
+            nuevaAlerta.setAttribute('role', 'alert');
+            nuevaAlerta.innerHTML = `
+            ${mensaje}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
         `;
-            document.querySelector('.modal-body').prepend(alertContainer); // Puedes colocarlo donde prefieras
-            setTimeout(() => alertContainer.remove(), 5000); // Quita la alerta después de 5 segundos
+            contenedorAlerta.prepend(nuevaAlerta); // Inserta la alerta al inicio del modal
+            setTimeout(() => nuevaAlerta.remove(), 5000); // Elimina la alerta después de 5 segundos
         }
 
-        // Cuando se hace clic en el botón "Elegir Turno/Profesor"
-        document.querySelectorAll('.select-horario-btn').forEach(button => {
-            button.addEventListener('click', function () {
-                const enrollmentId = this.dataset.enrollmentId;
-                const subjectId = this.dataset.subjectId;
-                const semestreId = this.dataset.semestreId;
-console.log(semestreId)
-                // Almacena el ID de la inscripción en un campo oculto dentro del modal
-                document.getElementById('modal-enrollment-id').value = enrollmentId;
+        // Cuando se hace clic en "Elegir Turno/Profesor"
+        document.querySelectorAll('.select-horario-btn').forEach(boton => {
+            boton.addEventListener('click', function () {
+                const idInscripcion = this.dataset.enrollmentId;
+                const idAsignatura = this.dataset.subjectId;
+                const idSemestre = this.dataset.semestreId;
+                    console.log('INSCR '+idInscripcion)
+                // Guarda el ID de la inscripción en un campo oculto del modal
+                document.getElementById('modal-enrollment-id').value = idInscripcion;
 
-                // Limpia el contenido previo y muestra un mensaje de carga
-                const horariosListContainer = document.getElementById('horarios-list-container');
-                horariosListContainer.innerHTML = '<p class="text-muted text-center">Cargando horarios disponibles...</p>';
+                // Limpia el contenido anterior y muestra mensaje de carga
+                const contenedorHorarios = document.getElementById('horarios-list-container');
+                contenedorHorarios.innerHTML = '<p class="text-muted text-center"><i class="fas fa-spinner fa-spin me-2"></i> Cargando horarios disponibles...</p>';
 
-                // Obtiene los horarios disponibles vía Fetch API
-                fetch(`../api/obtener_horarios_profesores.php?id_asignatura=${subjectId}&id_semestre=${semestreId}`)
+                // Elimina cualquier alerta anterior del modal
+                const alertaExistente = contenedorHorarios.closest('.modal-body').querySelector('.alert');
+                if (alertaExistente) {
+                    alertaExistente.remove();
+                }
+
+                // --- INICIO: Uso de FormData ---
+                const formData = new FormData();
+                formData.append('id_asignatura', idAsignatura);
+                formData.append('id_semestre', idSemestre); 
+
+                // Solicita los horarios disponibles usando Fetch API (POST)
+                fetch('../api/obtener_horarios_profesores.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                    // --- FIN: Uso de FormData ---
                     .then(response => {
                         if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
+                            throw new Error(`Error HTTP: ${response.status}`);
                         }
                         return response.json();
                     })
                     .then(data => {
                         if (data.success) {
                             if (data.horarios.length > 0) {
-                                let html = '<ul class="list-group">';
+                                // Construye la tabla de horarios
+                                let html = '<div class="table-responsive"><table class="table table-hover table-striped"><thead><tr><th>Profesor</th><th>Turno</th><th>Día</th><th>Aula</th><th>Acción</th></tr></thead><tbody>';
                                 data.horarios.forEach(horario => {
                                     html += `
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <strong>Profesor:</strong> ${horario.nombre_completo}<br>
-                                            <strong>Turno:</strong> ${horario.turno} (${horario.hora_inicio.substring(0, 5)} - ${horario.hora_fin.substring(0, 5)})<br>
-                                            <strong>Día:</strong> ${horario.dia_semana}<br>
-                                            <strong>Aula:</strong> ${horario.nombre_aula} (Capacidad: ${horario.capacidad})
-                                        </div>
-                                        <button class="btn btn-sm btn-success choose-horario-btn" data-horario-id="${horario.id}">
-                                            <i class="fas fa-check-circle me-1"></i> Elegir
-                                        </button>
-                                    </li>
+                                    <tr>
+                                        <td>${horario.nombre_profesor}</td>
+                                        <td>${horario.turno} (${horario.hora_inicio.substring(0, 5)} - ${horario.hora_fin.substring(0, 5)})</td>
+                                        <td>${horario.dia_semana}</td>
+                                        <td>${horario.nombre_aula} (Cap.: ${horario.capacidad})</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-success choose-horario-btn" data-horario-id="${horario.id}"
+                                                    data-nombre-profesor="${horario.nombre_completo}"
+                                                    data-turno="${horario.turno}"
+                                                    data-hora-inicio="${horario.hora_inicio}"
+                                                    data-hora-fin="${horario.hora_fin}"
+                                                    data-dia-semana="${horario.dia_semana}"
+                                                    data-nombre-aula="${horario.nombre_aula}">
+                                                <i class="fas fa-check-circle me-1"></i> Elegir
+                                            </button>
+                                        </td>
+                                    </tr>
                                 `;
                                 });
-                                html += '</ul>';
-                                horariosListContainer.innerHTML = html;
+                                html += '</tbody></table></div>';
+                                contenedorHorarios.innerHTML = html;
                             } else {
-                                horariosListContainer.innerHTML = '<div class="alert alert-info text-center" role="alert">No hay turnos/profesores disponibles para esta asignatura en este semestre.</div>';
+                                // Si no hay horarios disponibles
+                                contenedorHorarios.innerHTML = '<div class="alert alert-info text-center" role="alert">No hay turnos/profesores disponibles para esta asignatura en este semestre.</div>';
                             }
                         } else {
-                            horariosListContainer.innerHTML = `<div class="alert alert-danger text-center" role="alert">Error al cargar horarios: ${data.message}</div>`;
+                            // Error del servidor
+                            contenedorHorarios.innerHTML = `<div class="alert alert-danger text-center" role="alert">Error al cargar horarios: ${data.message}</div>`;
                         }
                     })
                     .catch(error => {
-                        console.error("Fetch Error:", error);
-                        horariosListContainer.innerHTML = '<div class="alert alert-danger text-center" role="alert">Error de conexión al cargar horarios. Por favor, intente de nuevo.</div>';
+                        console.error("Error en Fetch:", error);
+                        contenedorHorarios.innerHTML = '<div class="alert alert-danger text-center" role="alert">Error de conexión al cargar horarios. Por favor, intente de nuevo.</div>';
                     });
             });
         });
 
-        // Cuando se hace clic en un botón "Elegir" dentro del modal (usando delegación de eventos)
+        // Delegación de evento: cuando se hace clic en "Elegir" dentro del modal
         document.getElementById('horarios-list-container').addEventListener('click', function (event) {
-            if (event.target.classList.contains('choose-horario-btn')) {
-                const chooseButton = event.target;
-                const horarioId = chooseButton.dataset.horarioId;
-                const enrollmentId = document.getElementById('modal-enrollment-id').value; // Obtiene el ID de la inscripción almacenado
 
-                if (!horarioId || !enrollmentId) {
-                    showAlert('Error: Datos incompletos para seleccionar el horario.');
+
+            if (event.target.classList.contains('choose-horario-btn') || event.target.closest('.choose-horario-btn')) {
+                console.log('lo he dado')
+                const botonElegir = event.target.closest('.choose-horario-btn');
+                const idHorario = botonElegir.dataset.horarioId;
+                const idInscripcion = document.getElementById('modal-enrollment-id').value;
+                
+                console.log('idHorario: '+idHorario)
+                console.log('idInscripcion: '+idInscripcion)
+                // Detalles para actualizar la UI
+                const nombreProfesor = botonElegir.dataset.nombreProfesor;
+                const turno = botonElegir.dataset.turno;
+                const horaInicio = botonElegir.dataset.horaInicio;
+                const horaFin = botonElegir.dataset.horaFin;
+                const diaSemana = botonElegir.dataset.diaSemana;
+                const nombreAula = botonElegir.dataset.nombreAula;
+
+                // Validación básica
+                if (!idHorario || !idInscripcion) {
+                    mostrarAlerta('Error: Datos incompletos para seleccionar el horario.');
                     return;
                 }
 
-                // Deshabilitar el botón mientras se procesa la solicitud
-                chooseButton.disabled = true;
-                chooseButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cargando...';
+                // Desactiva el botón mientras se procesa
+                botonElegir.disabled = true;
+                botonElegir.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cargando...';
 
-
-                // Crear un objeto FormData para enviar los datos al servidor
+                // Prepara datos para enviar al servidor
                 const formData = new FormData();
-                formData.append('id_enrollment', enrollmentId);
-                formData.append('id_horario', horarioId);
+                formData.append('id_enrollment', idInscripcion);
+                formData.append('id_horario', idHorario);
 
-                // Enviar la solicitud POST usando Fetch API
+                // Enviar petición POST para guardar el horario seleccionado
                 fetch('../api/actualizar_horario_inscripcion.php', {
                     method: 'POST',
-                    body: formData // Aquí es donde se usa FormData
+                    body: formData
                 })
                     .then(response => {
                         if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
+                            throw new Error(`Error HTTP: ${response.status}`);
                         }
                         return response.json();
                     })
                     .then(data => {
                         if (data.success) {
-                            showAlert('Horario seleccionado exitosamente.', 'success');
+                            mostrarAlerta('Horario seleccionado exitosamente.', 'success');
 
-                            // Actualiza la UI:
-                            // 1. Cambia el estado a "Confirmada"
-                            const statusBadge = document.getElementById(`status-${enrollmentId}`);
-                            if (statusBadge) {
-                                statusBadge.classList.remove('bg-warning', 'text-dark');
-                                statusBadge.classList.add('bg-success');
-                                statusBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Confirmada';
+                            // 1. Cambiar el estado de la inscripción
+                            const estadoBadge = document.getElementById(`status-${idInscripcion}`);
+                            if (estadoBadge) {
+                                estadoBadge.classList.remove('bg-warning', 'text-dark');
+                                estadoBadge.classList.add('bg-success');
+                                estadoBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Confirmada';
                             }
 
-                            // 2. Oculta el botón "Elegir Turno/Profesor" para esta inscripción y lo reemplaza
-                            const selectButton = document.getElementById(`select-btn-${enrollmentId}`);
-                            if (selectButton) {
-                                const newButton = document.createElement('button');
-                                newButton.className = 'btn btn-sm btn-secondary';
-                                newButton.disabled = true;
-                                newButton.textContent = 'Turno Asignado';
-                                selectButton.replaceWith(newButton);
-                            }
-
-                            // 3. Muestra los detalles del horario seleccionado
-                            const horarioInfoDiv = document.getElementById(`horario-info-${enrollmentId}`);
-                            if (horarioInfoDiv && data.horario_details) {
-                                let horarioDetailsHtml = '<small class="text-muted">';
-                                horarioDetailsHtml += `Profesor: ${data.horario_details.nombre_completo}<br>`;
-                                horarioDetailsHtml += `Turno: ${data.horario_details.turno} (${data.horario_details.hora_inicio.substring(0, 5)} - ${data.horario_details.hora_fin.substring(0, 5)})<br>`;
-                                horarioDetailsHtml += `Día: ${data.horario_details.dia_semana}<br>`;
-                                horarioDetailsHtml += `Aula: ${data.horario_details.nombre_aula}`;
-                                horarioDetailsHtml += '</small>';
-                                horarioInfoDiv.innerHTML = horarioDetailsHtml;
-                                horarioInfoDiv.style.display = 'block'; // Asegúrate de que esté visible
+                            // 2. Reemplaza el botón por información del turno asignado
+                            const contenedorBoton = document.getElementById(`select-btn-${idInscripcion}`).parentNode;
+                            if (contenedorBoton) {
+                                contenedorBoton.innerHTML = `
+                                <span class="text-muted">Turno Asignado</span>
+                                <div id="horario-info-${idInscripcion}" style="display:block;">
+                                    <small class="text-muted">
+                                        Profesor: ${nombreProfesor}<br>
+                                        Turno: ${turno} (${horaInicio.substring(0, 5)} - ${horaFin.substring(0, 5)})<br>
+                                        Día: ${diaSemana}<br>
+                                        Aula: ${nombreAula}
+                                    </small>
+                                </div>
+                            `;
                             }
 
                             // Cierra el modal
-                            const selectHorarioModal = bootstrap.Modal.getInstance(document.getElementById('selectHorarioModal'));
-                            if (selectHorarioModal) {
-                                selectHorarioModal.hide();
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('selectHorarioModal'));
+                            if (modal) {
+                                modal.hide();
                             }
 
                         } else {
-                            showAlert(`Error al seleccionar el horario: ${data.message}`);
+                            mostrarAlerta(`Error al seleccionar el horario: ${data.message}`);
                         }
                     })
                     .catch(error => {
-                        console.error("Fetch Error:", error);
-                        showAlert('Error de conexión al seleccionar el horario. Por favor, intente de nuevo.');
+                        console.error("Error en Fetch:", error);
+                        mostrarAlerta('Error de conexión al seleccionar el horario. Por favor, intente de nuevo.');
                     })
                     .finally(() => {
-                        // Habilitar el botón nuevamente en caso de error
-                        chooseButton.disabled = false;
-                        chooseButton.innerHTML = '<i class="fas fa-check-circle me-1"></i> Elegir';
+                        // Rehabilita el botón si hubo error (si fue éxito el modal ya se cerró)
+                        botonElegir.disabled = false;
+                        botonElegir.innerHTML = '<i class="fas fa-check-circle me-1"></i> Elegir';
                     });
             }
         });
     });
+
+
 </script>
+<?php include_once '../includes/footer.php'; ?>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 
 <script>
     // Variables globales que no dependen del contenido del modal

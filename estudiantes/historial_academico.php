@@ -240,7 +240,7 @@ try {
                                                                     <th scope="col" class="text-center">Créditos</th>
                                                                     <th scope="col" class="text-center">Nota Final</th>
                                                                     <th scope="col" class="text-center">Estado</th>
-                                                                    <th scope="col">Observaciones</th>
+                                                                    
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
@@ -257,7 +257,7 @@ try {
                                                                                 <i class="<?php echo $iconoAsignatura; ?> me-1"></i><?php echo htmlspecialchars($asignatura['estado_final']); ?>
                                                                             </span>
                                                                         </td>
-                                                                        <td><?php echo !empty($asignatura['observaciones_admin']) ? htmlspecialchars($asignatura['observaciones_admin']) : 'N/A'; ?></td>
+                                                                        
                                                                     </tr>
                                                                 <?php endforeach; ?>
                                                             </tbody>

@@ -19,6 +19,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $hora_inicio = sanitize_input($_POST['hora_inicio'] ?? '');
     $hora_fin = sanitize_input($_POST['hora_fin'] ?? '');
     $turno = sanitize_input($_POST['turno'] ?? '');
+ 
+
+
+
 
     // Validaciones básicas
     if (empty($id_semestre) || empty($id_asignatura) || empty($id_curso) || empty($id_profesor) || empty($id_aula) || empty($dia_semana) || empty($hora_inicio) || empty($hora_fin) || empty($turno)) {
@@ -305,11 +309,11 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
                                                         data-bs-toggle="modal" data-bs-target="#horariosModal">
                                                     <i class="fas fa-edit"></i>
                                                 </button>
-                                                <a href="horarios.php?action=delete&id_horario=<?php echo htmlspecialchars($horario['id']); ?>"
-                                                   class="btn btn-danger btn-sm delete-btn" title="Eliminar"
-                                                   onclick="return confirm('¿Estás seguro de que quieres eliminar este horario? Esta acción es irreversible.');">
-                                                    <i class="fas fa-trash"></i>
-                                                </a>
+                                                 <button type="button" class="btn btn-danger btn-sm delete-btn" title="Eliminar"
+                                                data-bs-toggle="modal" data-bs-target="#confirmDeleteModal"
+                                                data-id-horario="<?php echo htmlspecialchars($horario['id']); ?>">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -328,6 +332,33 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
                 </div>
             </div>
      
+
+
+            <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="confirmDeleteModalLabel">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro de que deseas eliminar este horario?</p>
+                <p class="text-danger">Esta acción es irreversible y **no se podrá eliminar si hay estudiantes inscritos en este horario**.</p>
+                <form id="deleteForm" method="POST" action="horarios.php">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id_horario" id="deleteHorarioId">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" form="deleteForm" class="btn btn-danger">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
 
 <div class="modal fade" id="horariosModal" tabindex="-1" aria-labelledby="horariosModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
