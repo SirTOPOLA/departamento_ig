@@ -149,4 +149,15 @@ function get_current_semester($pdo) {
     return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
+
+if (!function_exists('format_date')) {
+    function format_date($date_string) {
+        if (empty($date_string) || $date_string == '0000-00-00') {
+            return '-';
+        }
+        // Assuming your dates are in YYYY-MM-DD format from the database
+        $date = new DateTime($date_string);
+        return $date->format('d/m/Y'); // Or any other format you prefer
+    }
+}
 ?>

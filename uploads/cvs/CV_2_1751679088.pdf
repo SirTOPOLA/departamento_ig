@@ -1,0 +1,145 @@
+
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Proforma #5</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-size: 14px;
+        }
+
+        .logo {
+            max-height: 80px;
+        }
+
+        .table th,
+        .table td {
+            vertical-align: middle;
+        }
+
+        @media print {
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body class="p-4">
+    <div class="container border p-4 rounded shadow-sm">
+        <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+            <h3>Proforma N° 5</h3>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <h4 class="fw-bold">CARPINTERIA SIXBOKU SL</h4>
+                <p class="mb-1">PERES MERCAMAR</p>
+                <p class="mb-1">Tel: 551718822</p>
+                <p class="mb-1">Email: sixboku@carpinteria.net</p>
+            </div>
+            <div class="col-md-6 text-end">
+                                    <img src="../uploads/uploads/configuracion/logo_1748791116.jpg" class="logo" alt="Logo">
+                                <p><strong>Fecha:</strong> 05/06/2025</p>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <h6>Cliente:</h6>
+                <p class="mb-1"><strong>lucas moreno</strong></p>
+                <p class="mb-1">Dirección: lamper</p>
+                <p class="mb-1">Teléfono: 222001122</p>
+            </div>
+            <div class="col-md-6">
+                <h6>Proyecto:</h6>
+                <p class="mb-1">aparador de pared</p>
+                            </div>
+        </div>
+
+        <h6>Materiales Solicitados</h6>
+        <table class="table table-bordered table-sm">
+            <thead class="table-light">
+                <tr>
+                    <th>Material</th>
+                    <th>Unidad</th>
+                    <th>Cantidad</th>
+                    <th>Precio Unitario (XAF)</th>
+                    <th>Subtotal (XAF)</th>
+                </tr>
+            </thead>
+            <tbody>
+                                    <tr>
+                        <td>Barniz transparente</td>
+                        <td>litro</td>
+                        <td>5</td>
+                        <td>3,500.00</td>
+                        <td>17,500.00</td>
+                    </tr>
+                                    <tr>
+                        <td>Tornillos para madera 100mm</td>
+                        <td>kg</td>
+                        <td>4</td>
+                        <td>1,500.00</td>
+                        <td>6,000.00</td>
+                    </tr>
+                            </tbody>
+        </table>
+
+        <table class="table table-borderless table-sm w-auto ms-auto">
+            <tbody>
+                <tr>
+                    <th class="text-end" style="width: 200px;">Total Materiales:</th>
+                    <td class="text-end">23,500.00                        XAF</td>
+                </tr>
+
+                
+                <tr>
+                    <th class="text-end">Mano de Obra:</th>
+                    <td class="text-end">25,000.00                        XAF</td>
+                </tr>
+
+                
+                <tr class="border-top">
+                    <th class="text-end">Subtotal:</th>
+                    <td class="text-end">48,500.00                        XAF</td>
+                </tr>
+
+                                    <tr>
+                        <th class="text-end">IVA (15.00%):</th>
+                        <td class="text-end">7,275.00     XAF</td>
+                    </tr>
+                    <tr>
+                        <th class="text-end">Total con IVA:</th>
+                        <td class="text-end">55,775.00                            XAF</td>
+                    </tr>
+                            </tbody>
+        </table>
+
+        <div class="mt-5">
+            <p class="fst-italic">* Esta proforma no representa un compromiso definitivo. Está sujeta a cambios por
+                disponibilidad de materiales o modificaciones del proyecto.</p>
+        </div>
+
+        <div class="row no-print mt-3">
+            <div class="col-md-6">
+                <a href="https://wa.me/?text=Hola,%20aquí%20tienes%20tu%20proforma:%20https%3A%2F%2Ftu-dominio.com%2Fcontroladores%2Fpdf_proforma.php%3Fid%3D5"
+                    target="_blank" class="btn btn-success">
+                    📱 Enviar por WhatsApp
+                </a>
+            </div>
+            <div class="col-md-6 text-end">
+                <button class="btn btn-success descargar-pdf-btn" data-id="5">
+                    📥 Descargar PDF
+                </button>
+
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
+

@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 01-07-2025 a las 17:04:37
+-- Tiempo de generación: 05-07-2025 a las 04:57:15
 -- Versión del servidor: 10.4.32-MariaDB
--- Versión de PHP: 8.0.30
+-- Versión de PHP: 8.2.12
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -18,7 +18,7 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Base de datos: `departemento`
+-- Base de datos: `departamento`
 --
 
 -- --------------------------------------------------------
@@ -151,13 +151,6 @@ CREATE TABLE `cvs_profesores` (
   `fecha_subida` datetime DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `cvs_profesores`
---
-
-INSERT INTO `cvs_profesores` (`id`, `id_profesor`, `nombre_archivo`, `ruta_archivo`, `fecha_subida`) VALUES
-(3, 1, 'Notas_2024 - 2025_LMN-A-25-1.pdf', 'uploads/cvs/1_cv_1751246814.pdf', '2025-06-30 02:26:54');
-
 -- --------------------------------------------------------
 
 --
@@ -183,7 +176,7 @@ CREATE TABLE `departamento` (
 --
 
 INSERT INTO `departamento` (`id_departamento`, `nombre`, `universidad`, `historia`, `imagen`, `logo_unge`, `logo_pais`, `info_matricula`, `direccion`, `telefono`, `horario`) VALUES
-(1, 'DEPARTAMENTO DE INFOIRMATICA DE GESTION', 'UNIVERSIDAD NACIONAL DE GE', '', NULL, NULL, NULL, '', '', '', '');
+(1, 'DEPARTAMENTO DE INFOIRMATICA DE GESTION', 'UNIVERSIDAD NACIONAL DE GE', '', 'uploads/configuracion/6868606212b5f.jpg', 'uploads/configuracion/68686062134d3.jpg', NULL, '', '', '', '');
 
 -- --------------------------------------------------------
 
@@ -229,7 +222,9 @@ CREATE TABLE `historial_academico` (
 
 INSERT INTO `historial_academico` (`id`, `id_estudiante`, `id_asignatura`, `id_semestre`, `nota_final`, `estado_final`, `fecha_actualizacion`) VALUES
 (1, 12, 14, 2, 0.00, '', '2025-07-01 16:03:18'),
-(2, 12, 11, 2, 0.00, '', '2025-07-01 16:03:22');
+(2, 12, 11, 2, 0.00, '', '2025-07-01 16:03:22'),
+(3, 1, 11, 2, 5.00, 'APROBADO', '2025-07-05 02:53:25'),
+(4, 12, 11, 2, 4.00, 'REPROBADO', '2025-07-05 02:53:25');
 
 -- --------------------------------------------------------
 
@@ -269,20 +264,11 @@ CREATE TABLE `inscripciones_estudiantes` (
   `id` int(11) NOT NULL,
   `id_estudiante` int(11) NOT NULL,
   `id_semestre` int(11) NOT NULL,
+  `id_horario` int(11) DEFAULT NULL,
   `id_asignatura` int(11) NOT NULL,
   `fecha_inscripcion` datetime DEFAULT current_timestamp(),
   `confirmada` tinyint(1) DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Volcado de datos para la tabla `inscripciones_estudiantes`
---
-
-INSERT INTO `inscripciones_estudiantes` (`id`, `id_estudiante`, `id_semestre`, `id_asignatura`, `fecha_inscripcion`, `confirmada`) VALUES
-(7, 1, 2, 11, '2025-06-29 23:07:12', 1),
-(8, 1, 2, 14, '2025-06-29 23:07:12', 1),
-(9, 12, 2, 11, '2025-07-01 14:35:16', 1),
-(10, 12, 2, 14, '2025-07-01 14:35:16', 1);
 
 -- --------------------------------------------------------
 
@@ -586,7 +572,8 @@ ALTER TABLE `inscripciones_estudiantes`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `id_estudiante` (`id_estudiante`,`id_semestre`,`id_asignatura`),
   ADD KEY `fk_inscripcion_semestre` (`id_semestre`),
-  ADD KEY `fk_inscripcion_asignatura` (`id_asignatura`);
+  ADD KEY `fk_inscripcion_asignatura` (`id_asignatura`),
+  ADD KEY `fk_inscripcion_horario` (`id_horario`);
 
 --
 -- Indices de la tabla `notas`
@@ -695,7 +682,7 @@ ALTER TABLE `curso_estudiante`
 -- AUTO_INCREMENT de la tabla `cvs_profesores`
 --
 ALTER TABLE `cvs_profesores`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT de la tabla `departamento`
@@ -713,7 +700,7 @@ ALTER TABLE `estudiantes`
 -- AUTO_INCREMENT de la tabla `historial_academico`
 --
 ALTER TABLE `historial_academico`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT de la tabla `horarios`
@@ -731,7 +718,7 @@ ALTER TABLE `inscripciones_estudiantes`
 -- AUTO_INCREMENT de la tabla `notas`
 --
 ALTER TABLE `notas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `profesores`
@@ -749,7 +736,7 @@ ALTER TABLE `profesores_asignaturas_asignadas`
 -- AUTO_INCREMENT de la tabla `profesores_asignaturas_sugeridas`
 --
 ALTER TABLE `profesores_asignaturas_sugeridas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT de la tabla `publicaciones`
@@ -804,7 +791,7 @@ ALTER TABLE `curso_estudiante`
 -- Filtros para la tabla `cvs_profesores`
 --
 ALTER TABLE `cvs_profesores`
-  ADD CONSTRAINT `fk_cv_profesor` FOREIGN KEY (`id_profesor`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_cvs_profesores_to_profesores` FOREIGN KEY (`id_profesor`) REFERENCES `profesores` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Filtros para la tabla `estudiantes`
@@ -836,6 +823,7 @@ ALTER TABLE `horarios`
 ALTER TABLE `inscripciones_estudiantes`
   ADD CONSTRAINT `fk_inscripcion_asignatura` FOREIGN KEY (`id_asignatura`) REFERENCES `asignaturas` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_inscripcion_estudiante` FOREIGN KEY (`id_estudiante`) REFERENCES `estudiantes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_inscripcion_horario` FOREIGN KEY (`id_horario`) REFERENCES `horarios` (`id`) ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_inscripcion_semestre` FOREIGN KEY (`id_semestre`) REFERENCES `semestres` (`id`) ON UPDATE CASCADE;
 
 --

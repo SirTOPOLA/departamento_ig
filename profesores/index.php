@@ -1,10 +1,4 @@
 <?php
-// --- INICIO DE DEPURACIÓN TEMPORAL ---
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-// --- FIN DE DEPURACIÓN TEMPORAL ---
-
 require_once '../includes/functions.php';
 // Asegúrate de que esta función maneje el rol 'Profesor'
 check_login_and_role('Profesor');
@@ -30,7 +24,7 @@ if (!$id_profesor_actual) {
     exit;
 }
 
-// --- Lógica de Procesamiento POST ---
+// --- Lógica de Procesamiento POST (Centralizada) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -48,7 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!in_array($file_ext, $allowed_ext)) {
                     set_flash_message('danger', 'Error: Solo se permiten archivos PDF, DOC y DOCX para el CV.');
                 } else {
-                    $upload_dir = 'uploads/cvs/'; // Directorio donde se guardarán los CVs
+                    // Directorio donde se guardarán los CVs, relativo a este script (profesores/)
+                    $upload_dir = 'uploads/cvs/';
                     if (!is_dir($upload_dir)) {
                         mkdir($upload_dir, 0777, true); // Crear directorio si no existe
                     }
@@ -57,22 +52,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if (move_uploaded_file($file_tmp_name, $file_path)) {
                         // Guardar/actualizar información del CV en la base de datos
-                        // La tabla es `cvs_profesores`, columnas `id_profesor`, `nombre_archivo`, `ruta_archivo`, `fecha_subida`
-                        $stmt_check_cv = $pdo->prepare("SELECT id FROM cvs_profesores WHERE id_profesor = :id_profesor");
+                        $stmt_check_cv = $pdo->prepare("SELECT id, ruta_archivo FROM cvs_profesores WHERE id_profesor = :id_profesor");
                         $stmt_check_cv->bindParam(':id_profesor', $id_profesor_actual, PDO::PARAM_INT);
                         $stmt_check_cv->execute();
                         $existing_cv = $stmt_check_cv->fetch(PDO::FETCH_ASSOC);
 
                         if ($existing_cv) {
-                            // Opcional: Eliminar CV anterior del servidor si solo se permite uno
-                            $stmt_old_cv_path = $pdo->prepare("SELECT ruta_archivo FROM cvs_profesores WHERE id = :id_cv");
-                            $stmt_old_cv_path->bindParam(':id_cv', $existing_cv['id'], PDO::PARAM_INT);
-                            $stmt_old_cv_path->execute();
-                            $old_path = $stmt_old_cv_path->fetchColumn();
-                            if ($old_path && file_exists($old_path)) {
-                                unlink($old_path); // Eliminar archivo físico anterior
+                            // Eliminar CV anterior del servidor si solo se permite uno
+                            if ($existing_cv['ruta_archivo'] && file_exists($existing_cv['ruta_archivo'])) {
+                                unlink($existing_cv['ruta_archivo']); // Eliminar archivo físico anterior
                             }
-
                             $stmt_update_cv = $pdo->prepare("UPDATE cvs_profesores SET nombre_archivo = :nombre_archivo, ruta_archivo = :ruta_archivo, fecha_subida = NOW() WHERE id_profesor = :id_profesor");
                             $stmt_update_cv->bindParam(':nombre_archivo', $file_name);
                             $stmt_update_cv->bindParam(':ruta_archivo', $file_path);
@@ -142,11 +131,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->rollBack();
         set_flash_message('danger', 'Error de base de datos: ' . $e->getMessage());
     }
-   /*  header('Location: index.php'); // Redirección POST-GET
-    exit; */
+    // No redireccionamos aquí para que los mensajes flash se muestren en la misma página.
+    // Si quieres redireccionar, puedes usar: header('Location: panel.php'); exit;
 }
 
-// --- Obtener datos para la vista del profesor ---
+// --- Obtener datos para la vista del profesor (todos los datos necesarios para las pestañas) ---
 
 // Obtener información del CV del profesor de `cvs_profesores`
 $profesor_cv = null;
@@ -173,8 +162,6 @@ $suggested_subjects = $stmt_suggested->fetchAll(PDO::FETCH_ASSOC);
 
 // Obtener el semestre actual para filtrar los horarios
 // Asumiendo que `semestres` tiene una columna `activo` o que `get_current_semester` ya implementa la lógica
-// Si no existe `activo` o `get_current_semester`, podrías buscar el semestre cuya fecha actual esté entre `fecha_inicio` y `fecha_fin`.
- 
 $current_semester = get_current_semester($pdo);
 
 // Obtener los horarios asignados a este profesor para el semestre actual de `horarios`
@@ -268,183 +255,15 @@ if ($current_semester) {
 
 <div class="tab-content" id="professorTabsContent">
     <div class="tab-pane fade show active" id="cvSection" role="tabpanel" aria-labelledby="cv-tab">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-secondary text-white">
-                <h5 class="mb-0">Gestión de Currículum Vitae (CV)</h5>
-            </div>
-            <div class="card-body">
-                <?php if ($profesor_cv): ?>
-                    <div class="alert alert-success d-flex align-items-center" role="alert">
-                        <i class="fas fa-check-circle me-2"></i>
-                        <div>Tu CV actual: <a href="<?php echo htmlspecialchars($profesor_cv['ruta_archivo']); ?>" target="_blank" class="alert-link"><?php echo htmlspecialchars($profesor_cv['nombre_archivo']); ?></a></div>
-                    </div>
-                <?php else: ?>
-                    <div class="alert alert-warning d-flex align-items-center" role="alert">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <div>Aún no has subido tu CV. Por favor, súbelo para completar tu perfil.</div>
-                    </div>
-                <?php endif; ?>
-
-                <form action="index.php" method="POST" enctype="multipart/form-data">
-                    <input type="hidden" name="action" value="upload_cv">
-                    <div class="mb-3">
-                        <label for="profesor_cv" class="form-label">Seleccionar archivo CV (PDF, DOC, DOCX)</label>
-                        <input class="form-control" type="file" id="profesor_cv" name="profesor_cv" accept=".pdf,.doc,.docx" required>
-                        <div class="form-text">Tamaño máximo de archivo: 5MB.</div>
-                    </div>
-                    <button type="submit" class="btn btn-primary"><i class="fas fa-upload me-2"></i> Subir CV</button>
-                </form>
-            </div>
-        </div>
+        <?php include_once 'cv.php'; // Incluye el contenido del CV ?>
     </div>
 
     <div class="tab-pane fade" id="subjectsSection" role="tabpanel" aria-labelledby="subjects-tab">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-secondary text-white">
-                <h5 class="mb-0">Asignaturas Disponibles para Sugerir</h5>
-            </div>
-            <div class="card-body">
-                <?php if (count($available_subjects) > 0): ?>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-striped" id="availableSubjectsTable">
-                            <thead>
-                                <tr>
-                                    <th>Asignatura</th>
-                                    <th class="text-center">Créditos</th>
-                                    <th class="text-center">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($available_subjects as $subject): ?>
-                                    <tr>
-                                        <td><?php echo htmlspecialchars($subject['nombre_asignatura']); ?></td>
-                                        <td class="text-center"><?php echo htmlspecialchars($subject['creditos']); ?></td>
-                                        <td class="text-center">
-                                            <form action="index.php" method="POST" class="d-inline-block">
-                                                <input type="hidden" name="action" value="suggest_subject">
-                                                <input type="hidden" name="id_asignatura" value="<?php echo htmlspecialchars($subject['id']); ?>">
-                                                <button type="submit" class="btn btn-info btn-sm" title="Sugerir Asignatura"
-                                                        onclick="return confirm('¿Estás seguro de que quieres sugerir impartir la asignatura: <?php echo htmlspecialchars($subject['nombre_asignatura']); ?>?');">
-                                                    <i class="fas fa-plus-circle"></i> Sugerir
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php else: ?>
-                    <div class="alert alert-info text-center">No hay asignaturas disponibles para sugerir en este momento.</div>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-secondary text-white">
-                <h5 class="mb-0">Mis Asignaturas Sugeridas</h5>
-            </div>
-            <div class="card-body">
-                <?php if (count($suggested_subjects) > 0): ?>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Asignatura</th>
-                                    <th class="text-center">Créditos</th>
-                                    <th class="text-center">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($suggested_subjects as $suggestion): ?>
-                                    <tr>
-                                        <td><?php echo htmlspecialchars($suggestion['nombre_asignatura']); ?></td>
-                                        <td class="text-center"><?php echo htmlspecialchars($suggestion['creditos']); ?></td>
-                                        <td class="text-center">
-                                            <form action="index.php" method="POST" class="d-inline-block">
-                                                <input type="hidden" name="action" value="remove_suggestion">
-                                                <input type="hidden" name="id_sugerencia" value="<?php echo htmlspecialchars($suggestion['id']); ?>">
-                                                <button type="submit" class="btn btn-danger btn-sm" title="Eliminar Sugerencia"
-                                                        onclick="return confirm('¿Estás seguro de que quieres eliminar la sugerencia para: <?php echo htmlspecialchars($suggestion['nombre_asignatura']); ?>?');">
-                                                    <i class="fas fa-trash"></i> Eliminar
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php else: ?>
-                    <div class="alert alert-info text-center">Aún no has sugerido ninguna asignatura.</div>
-                <?php endif; ?>
-            </div>
-        </div>
+        <?php include_once 'sugerencia.php'; // Incluye el contenido de sugerencias ?>
     </div>
 
     <div class="tab-pane fade" id="assignedSubjectsSection" role="tabpanel" aria-labelledby="assigned-subjects-tab">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-secondary text-white">
-                <h5 class="mb-0">Mis Asignaturas Asignadas para el Semestre Actual</h5>
-            </div>
-            <div class="card-body">
-                <?php if (!$current_semester): ?>
-                    <div class="alert alert-info">No hay un semestre académico activo para mostrar asignaturas asignadas.</div>
-                <?php elseif (empty($assigned_schedules)): ?>
-                    <div class="alert alert-info">No tienes asignaturas asignadas para el semestre actual.</div>
-                <?php else: ?>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-striped" id="assignedSubjectsListTable">
-                            <thead>
-                                <tr>
-                                    <th>Asignatura</th>
-                                    <th>Curso</th>
-                                    <th>Día</th>
-                                    <th>Hora</th>
-                                    <th>Aula</th>
-                                    <th>Turno</th>
-                                    <th class="text-center">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($assigned_schedules as $schedule): ?>
-                                    <tr data-id_horario="<?php echo htmlspecialchars($schedule['id_horario']); ?>"
-                                        data-id_asignatura="<?php echo htmlspecialchars($schedule['id_asignatura']); ?>"
-                                        data-id_curso="<?php echo htmlspecialchars($schedule['id_curso']); ?>"
-                                        data-turno="<?php echo htmlspecialchars($schedule['turno']); ?>"
-                                        data-nombre_asignatura="<?php echo htmlspecialchars($schedule['nombre_asignatura']); ?>"
-                                        data-nombre_curso="<?php echo htmlspecialchars($schedule['nombre_curso']); ?>">
-                                        <td><?php echo htmlspecialchars($schedule['nombre_asignatura']); ?></td>
-                                        <td><?php echo htmlspecialchars($schedule['nombre_curso']); ?></td>
-                                        <td><?php echo htmlspecialchars($schedule['dia_semana']); ?></td>
-                                        <td><?php echo htmlspecialchars(substr($schedule['hora_inicio'], 0, 5) . ' - ' . substr($schedule['hora_fin'], 0, 5)); ?></td>
-                                        <td><?php echo htmlspecialchars($schedule['nombre_aula']); ?></td>
-                                        <td><?php echo htmlspecialchars($schedule['turno']); ?></td>
-                                        <td class="text-center text-nowrap">
-                                            <button type="button" class="btn btn-primary btn-sm view-students-btn me-1"
-                                                    data-bs-toggle="modal" data-bs-target="#studentListModal"
-                                                    title="Ver Lista de Estudiantes">
-                                                <i class="fas fa-users"></i> Lista Estudiantes
-                                            </button>
-                                            <button type="button" class="btn btn-warning btn-sm manage-grades-btn me-1"
-                                                    data-bs-toggle="modal" data-bs-target="#gradeManagementModal"
-                                                    title="Gestionar Notas">
-                                                <i class="fas fa-edit"></i> Gestionar Notas
-                                            </button>
-                                            <a href="#" class="btn btn-danger btn-sm download-student-list-pdf-btn"
-                                               data-id_horario="<?php echo htmlspecialchars($schedule['id_horario']); ?>"
-                                               title="Descargar Lista de Estudiantes (PDF)" target="_blank">
-                                                <i class="fas fa-file-pdf"></i> Lista PDF
-                                            </a>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
+        <?php include_once 'mis_asignaturas.php'; // Incluye el contenido de asignaturas asignadas ?>
     </div>
 </div>
 
@@ -557,41 +376,55 @@ if ($current_semester) {
                 const id_horario = row.dataset.id_horario;
                 const nombre_asignatura = row.dataset.nombre_asignatura;
                 const nombre_curso = row.dataset.nombre_curso;
-                const turno = row.dataset.turno;
+                const turno = row.dataset.turno; // Obtener el turno
 
-                document.getElementById('modalSubjectCourseTurn').innerText = `${nombre_asignatura} (${nombre_curso} - ${turno})`;
+                document.getElementById('modalSubjectCourseTurn').textContent = `${nombre_asignatura} - ${nombre_curso} (${turno})`;
                 document.getElementById('loadingStudentList').style.display = 'block';
-                document.getElementById('studentListContent').innerHTML = '';
+                document.getElementById('studentListContent').innerHTML = '<p class="text-center text-muted" id="loadingStudentList">Cargando lista de estudiantes...</p>';
                 document.getElementById('noStudentsMessage').style.display = 'none';
 
-                fetch(`../api/profesores_estudiantes.php?id_horario=${id_horario}`)
+                // Realizar una llamada AJAX para obtener la lista de estudiantes
+                fetch(`fetch_students.php?id_horario=${id_horario}`)
                     .then(response => response.json())
                     .then(data => {
                         document.getElementById('loadingStudentList').style.display = 'none';
                         if (data.success && data.students.length > 0) {
-                            let htmlContent = `<div class="table-responsive"><table class="table table-sm table-bordered table-hover"><thead><tr>
-                                                <th>Cód. Registro</th><th>Nombre Estudiante</th><th>Email</th><th>Estado Inscripción</th>
-                                                </tr></thead><tbody>`;
-                            data.students.forEach(student => {
-                                const statusBadge = student.confirmada == 1 ? '<span class="badge bg-success">Confirmada</span>' : '<span class="badge bg-warning text-dark">Pendiente</span>';
-                                htmlContent += `
+                            let studentHtml = `
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Nombre del Estudiante</th>
+                                                <th>Matrícula</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                            data.students.forEach((student, index) => {
+                                studentHtml += `
                                     <tr>
-                                        <td>${student.codigo_registro}</td>
+                                        <td>${index + 1}</td>
                                         <td>${student.nombre_completo}</td>
-                                        <td>${student.email || 'N/A'}</td>
-                                        <td>${statusBadge}</td>
+                                        <td>${student.matricula}</td>
                                     </tr>
                                 `;
                             });
-                            htmlContent += `</tbody></table></div>`;
-                            document.getElementById('studentListContent').innerHTML = htmlContent;
+                            studentHtml += `
+                                        </tbody>
+                                    </table>
+                                </div>
+                            `;
+                            document.getElementById('studentListContent').innerHTML = studentHtml;
                         } else {
                             document.getElementById('noStudentsMessage').style.display = 'block';
+                            document.getElementById('studentListContent').innerHTML = ''; // Limpiar contenido anterior
                         }
                     })
                     .catch(error => {
+                        console.error('Error al cargar la lista de estudiantes:', error);
                         document.getElementById('loadingStudentList').style.display = 'none';
-                        document.getElementById('studentListContent').innerHTML = `<div class="alert alert-danger">Error al cargar la lista de estudiantes: ${error.message}</div>`;
+                        document.getElementById('studentListContent').innerHTML = '<div class="alert alert-danger">Error al cargar la lista de estudiantes.</div>';
                     });
             });
         });
@@ -601,135 +434,101 @@ if ($current_semester) {
             button.addEventListener('click', function() {
                 const row = this.closest('tr');
                 const id_horario = row.dataset.id_horario;
-                const id_asignatura = row.dataset.id_asignatura; // No usada directamente aquí, pero útil para contexto
-                const id_curso = row.dataset.id_curso; // No usada directamente aquí, pero útil para contexto
-                const turno = row.dataset.turno;
                 const nombre_asignatura = row.dataset.nombre_asignatura;
                 const nombre_curso = row.dataset.nombre_curso;
+                const turno = row.dataset.turno;
 
-                document.getElementById('modalGradeSubjectCourseTurn').innerText = `${nombre_asignatura} (${nombre_curso} - ${turno})`;
+                document.getElementById('modalGradeSubjectCourseTurn').textContent = `${nombre_asignatura} - ${nombre_curso} (${turno})`;
                 document.getElementById('gradeFormIdHorario').value = id_horario;
                 document.getElementById('loadingGrades').style.display = 'block';
-                document.getElementById('gradesInputList').innerHTML = '';
+                document.getElementById('gradesInputList').innerHTML = '<p class="text-center text-muted" id="loadingGrades">Cargando notas y estudiantes...</p>';
                 document.getElementById('noGradesStudentsMessage').style.display = 'none';
                 document.getElementById('saveGradesBtn').style.display = 'none';
-                document.getElementById('downloadGradeReportPdfBtn').style.display = 'none'; // Ocultar hasta que se carguen los datos
+                document.getElementById('downloadGradeReportPdfBtn').style.display = 'none'; // Ocultar inicialmente el botón de PDF
 
-                // Set PDF download link for grade report
-                document.getElementById('downloadGradeReportPdfBtn').href = `generate_grade_report_pdf.php?id_horario=${id_horario}`;
-
-
-                // Cargar estudiantes y sus notas actuales via AJAX
-                fetch(`../api/listas_estudiantes.php?id_horario=${id_horario}`)
+                // Realizar una llamada AJAX para obtener las notas de los estudiantes
+                fetch(`fetch_grades.php?id_horario=${id_horario}`)
                     .then(response => response.json())
                     .then(data => {
                         document.getElementById('loadingGrades').style.display = 'none';
-                        if (data.success && data.students.length > 0) {
-                            let htmlContent = `<div class="table-responsive"><table class="table table-sm table-bordered table-hover"><thead><tr>
-                                                <th>Cód. Registro</th><th>Estudiante</th><th>Nota Actual</th><th>Estado</th>
-                                                </tr></thead><tbody>`;
-                            data.students.forEach(student => {
-                                const currentGrade = student.nota || '';
-                                const currentState = student.estado || 'PENDIENTE';
-                                const isActaConfirmed = student.acta_final_confirmada == 1;
-
-                                htmlContent += `
+                        if (data.success && data.grades.length > 0) {
+                            let gradesHtml = `
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Estudiante</th>
+                                                <th>Matrícula</th>
+                                                <th>Nota Final</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                            data.grades.forEach((grade_info, index) => {
+                                gradesHtml += `
                                     <tr>
-                                        <td>${student.codigo_registro}</td>
-                                        <td>${student.nombre_completo}</td>
+                                        <td>${index + 1}</td>
+                                        <td>${htmlspecialchars(grade_info.nombre_completo)}</td>
+                                        <td>${htmlspecialchars(grade_info.matricula)}</td>
                                         <td>
-                                            <input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm"
-                                                name="grades[${student.id_inscripcion}][nota]" value="${currentGrade}"
-                                                ${isActaConfirmed ? 'disabled' : ''}>
-                                        </td>
-                                        <td>
-                                            <select class="form-select form-select-sm" name="grades[${student.id_inscripcion}][estado]" ${isActaConfirmed ? 'disabled' : ''}>
-                                                <option value="PENDIENTE" ${currentState === 'PENDIENTE' ? 'selected' : ''}>PENDIENTE</option>
-                                                <option value="APROBADO" ${currentState === 'APROBADO' ? 'selected' : ''}>APROBADO</option>
-                                                <option value="REPROBADO" ${currentState === 'REPROBADO' ? 'selected' : ''}>REPROBADO</option>
-                                            </select>
-                                            ${isActaConfirmed ? '<small class="text-muted d-block mt-1"><i class="fas fa-lock me-1"></i>Acta Final Confirmada</small>' : ''}
+                                            <input type="number" class="form-control form-control-sm grade-input"
+                                                name="grades[${grade_info.id_inscripcion}]"
+                                                value="${grade_info.nota_final !== null ? htmlspecialchars(grade_info.nota_final) : ''}"
+                                                min="0" max="100" step="1" required>
                                         </td>
                                     </tr>
                                 `;
                             });
-                            htmlContent += `</tbody></table></div>`;
-                            document.getElementById('gradesInputList').innerHTML = htmlContent;
-                            // Mostrar botón de guardar solo si hay estudiantes y el acta no está confirmada para al menos uno
-                            const anyNotConfirmed = data.students.some(s => s.acta_final_confirmada == 0);
-                            if (anyNotConfirmed) {
-                                document.getElementById('saveGradesBtn').style.display = 'inline-block';
-                            } else {
-                                document.getElementById('saveGradesBtn').style.display = 'none';
-                            }
-                            document.getElementById('downloadGradeReportPdfBtn').style.display = 'inline-block'; // Siempre mostrar PDF si hay estudiantes
+                            gradesHtml += `
+                                        </tbody>
+                                    </table>
+                                </div>
+                            `;
+                            document.getElementById('gradesInputList').innerHTML = gradesHtml;
+                            document.getElementById('saveGradesBtn').style.display = 'block';
+                            document.getElementById('downloadGradeReportPdfBtn').style.display = 'block'; // Mostrar el botón de PDF
+
+                            // Actualizar el enlace del botón de descarga de acta PDF
+                            const downloadPdfBtn = document.getElementById('downloadGradeReportPdfBtn');
+                            downloadPdfBtn.href = `generate_acta_pdf.php?id_horario=${id_horario}&id_semestre=<?php echo htmlspecialchars($current_semester['id'] ?? ''); ?>`;
+
                         } else {
                             document.getElementById('noGradesStudentsMessage').style.display = 'block';
+                            document.getElementById('gradesInputList').innerHTML = ''; // Limpiar contenido anterior
                             document.getElementById('saveGradesBtn').style.display = 'none';
                             document.getElementById('downloadGradeReportPdfBtn').style.display = 'none';
                         }
                     })
                     .catch(error => {
+                        console.error('Error al cargar las notas:', error);
                         document.getElementById('loadingGrades').style.display = 'none';
-                        document.getElementById('gradesInputList').innerHTML = `<div class="alert alert-danger">Error al cargar las notas: ${error.message}</div>`;
+                        document.getElementById('gradesInputList').innerHTML = '<div class="alert alert-danger">Error al cargar las notas.</div>';
                         document.getElementById('saveGradesBtn').style.display = 'none';
                         document.getElementById('downloadGradeReportPdfBtn').style.display = 'none';
                     });
             });
         });
 
-        // --- Lógica para Descargar Lista de Estudiantes (PDF) ---
+        // Función para escapar HTML en JavaScript (para nombres de estudiantes, etc.)
+        function htmlspecialchars(str) {
+            var map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return str.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        // Lógica para el botón de descarga de lista de estudiantes en PDF
         document.querySelectorAll('.download-student-list-pdf-btn').forEach(button => {
-            button.addEventListener('click', function(e) {
+            button.addEventListener('click', function(event) {
                 const id_horario = this.dataset.id_horario;
-                this.href = `generate_student_list_pdf.php?id_horario=${id_horario}`;
+                const id_semestre = <?php echo json_encode($current_semester['id'] ?? ''); ?>; // Pasar el ID del semestre
+                this.href = `generate_student_list_pdf.php?id_horario=${id_horario}&id_semestre=${id_semestre}`;
             });
         });
     });
 </script>
-
-<style>
-    /* Estilo para los círculos de iconos en las tarjetas de resumen */
-    .icon-circle {
-        width: 70px;
-        height: 70px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin: 0 auto 15px; /* Centra el círculo */
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    .card-body.text-center {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        height: 100%;
-    }
-    .card.h-100 {
-        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-    }
-    .card.h-100:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 16px rgba(0,0,0,0.2) !important;
-    }
-
-    /* Degradado para el encabezado de la tabla */
-    .bg-gradient-secondary {
-        background: linear-gradient(45deg, #6c757d, #495057); /* Gris oscuro a medio */
-    }
-
-    /* Mejorar el padding de las celdas para mayor espacio */
-    .table th, .table td {
-        padding: 0.75rem; /* Aumenta el padding para mayor aire */
-    }
-
-    /* Ajustar tamaño de fuente para el promedio/créditos en las tarjetas */
-    .card-text.fs-1 {
-        font-size: 3rem !important; /* Más grande */
-    }
-    .card-title {
-        font-weight: 600;
-    }
-</style>

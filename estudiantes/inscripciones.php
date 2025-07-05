@@ -212,8 +212,10 @@ if ($current_semester) {
             <i class="fas fa-plus-circle me-2"></i> Inscribirme en Asignaturas
         </button>
     </div>
+    
 
-    <div class="card shadow-sm mb-4">
+
+        <div class="card shadow-sm mb-4">
         <div class="card-header bg-primary text-white">
             <h5 class="mb-0">Tus Asignaturas Inscritas para el Semestre Actual</h5>
         </div>
@@ -228,6 +230,7 @@ if ($current_semester) {
                                 <th>Curso</th>
                                 <th>Semestre</th>
                                 <th>Estado</th>
+                                <th>Acción</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -255,6 +258,28 @@ if ($current_semester) {
                                                 </span>
                                             <?php endif; ?>
                                         </td>
+                                        <td>
+    <?php if (empty($enrollment['confirmada'])): ?>
+        <button type="button" class="btn btn-sm btn-info select-horario-btn"
+            data-bs-toggle="modal" data-bs-target="#selectHorarioModal"
+            data-enrollment-id="<?= (int) ($enrollment['id'] ?? 0) ?>"
+            data-subject-id="<?= (int) ($enrollment['id_asignatura'] ?? 0) ?>"
+            data-semestre-id="<?= (int) ($current_semester['id_semestre'] ?? 0) ?>"
+            id="select-btn-<?= (int) ($enrollment['id'] ?? 0) ?>">
+            <i class="fas fa-clock me-1"></i> Elegir Turno
+        </button>
+    <?php else: ?>
+        <span class="text-muted" id="select-btn-<?= (int) ($enrollment['id'] ?? 0) ?>">Turno Asignado</span>
+        <div id="horario-info-<?= (int) ($enrollment['id'] ?? 0) ?>" style="display:block;">
+            <small class="text-muted">
+                Profesor: <?= htmlspecialchars($enrollment['nombre_profesor'] ?? 'N/A') ?><br>
+                Turno: <?= htmlspecialchars($enrollment['turno'] ?? 'N/A') ?> (<?= htmlspecialchars(substr($enrollment['hora_inicio'] ?? '', 0, 5)) ?> - <?= htmlspecialchars(substr($enrollment['hora_fin'] ?? '', 0, 5)) ?>)<br>
+                Día: <?= htmlspecialchars($enrollment['dia_semana'] ?? 'N/A') ?><br>
+                Aula: <?= htmlspecialchars($enrollment['nombre_aula'] ?? 'N/A') ?>
+            </small>
+        </div>
+    <?php endif; ?>
+</td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
@@ -274,6 +299,33 @@ if ($current_semester) {
         </div>
     </div>
 
+
+
+
+        
+    </div>
+
+    <div class="modal fade" id="selectHorarioModal" tabindex="-1" aria-labelledby="selectHorarioModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="selectHorarioModalLabel">Seleccionar Turno y Profesor</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="horarios-list-container">
+                        <p class="text-muted text-center">Cargando horarios disponibles...</p>
+                    </div>
+                    <input type="hidden" id="modal-enrollment-id">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
 
     <?php if ($current_semester): ?>
@@ -319,7 +371,172 @@ if ($current_semester) {
 
 <?php include_once '../includes/footer.php'; ?>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
 
+        // Función auxiliar para mostrar alertas de forma consistente
+        function showAlert(message, type = 'danger') {
+            const alertContainer = document.createElement('div');
+            alertContainer.className = `alert alert-${type} alert-dismissible fade show mt-3`;
+            alertContainer.setAttribute('role', 'alert');
+            alertContainer.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+            document.querySelector('.modal-body').prepend(alertContainer); // Puedes colocarlo donde prefieras
+            setTimeout(() => alertContainer.remove(), 5000); // Quita la alerta después de 5 segundos
+        }
+
+        // Cuando se hace clic en el botón "Elegir Turno/Profesor"
+        document.querySelectorAll('.select-horario-btn').forEach(button => {
+            button.addEventListener('click', function () {
+                const enrollmentId = this.dataset.enrollmentId;
+                const subjectId = this.dataset.subjectId;
+                const semestreId = this.dataset.semestreId;
+console.log(semestreId)
+                // Almacena el ID de la inscripción en un campo oculto dentro del modal
+                document.getElementById('modal-enrollment-id').value = enrollmentId;
+
+                // Limpia el contenido previo y muestra un mensaje de carga
+                const horariosListContainer = document.getElementById('horarios-list-container');
+                horariosListContainer.innerHTML = '<p class="text-muted text-center">Cargando horarios disponibles...</p>';
+
+                // Obtiene los horarios disponibles vía Fetch API
+                fetch(`../api/obtener_horarios_profesores.php?id_asignatura=${subjectId}&id_semestre=${semestreId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            if (data.horarios.length > 0) {
+                                let html = '<ul class="list-group">';
+                                data.horarios.forEach(horario => {
+                                    html += `
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>Profesor:</strong> ${horario.nombre_completo}<br>
+                                            <strong>Turno:</strong> ${horario.turno} (${horario.hora_inicio.substring(0, 5)} - ${horario.hora_fin.substring(0, 5)})<br>
+                                            <strong>Día:</strong> ${horario.dia_semana}<br>
+                                            <strong>Aula:</strong> ${horario.nombre_aula} (Capacidad: ${horario.capacidad})
+                                        </div>
+                                        <button class="btn btn-sm btn-success choose-horario-btn" data-horario-id="${horario.id}">
+                                            <i class="fas fa-check-circle me-1"></i> Elegir
+                                        </button>
+                                    </li>
+                                `;
+                                });
+                                html += '</ul>';
+                                horariosListContainer.innerHTML = html;
+                            } else {
+                                horariosListContainer.innerHTML = '<div class="alert alert-info text-center" role="alert">No hay turnos/profesores disponibles para esta asignatura en este semestre.</div>';
+                            }
+                        } else {
+                            horariosListContainer.innerHTML = `<div class="alert alert-danger text-center" role="alert">Error al cargar horarios: ${data.message}</div>`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Fetch Error:", error);
+                        horariosListContainer.innerHTML = '<div class="alert alert-danger text-center" role="alert">Error de conexión al cargar horarios. Por favor, intente de nuevo.</div>';
+                    });
+            });
+        });
+
+        // Cuando se hace clic en un botón "Elegir" dentro del modal (usando delegación de eventos)
+        document.getElementById('horarios-list-container').addEventListener('click', function (event) {
+            if (event.target.classList.contains('choose-horario-btn')) {
+                const chooseButton = event.target;
+                const horarioId = chooseButton.dataset.horarioId;
+                const enrollmentId = document.getElementById('modal-enrollment-id').value; // Obtiene el ID de la inscripción almacenado
+
+                if (!horarioId || !enrollmentId) {
+                    showAlert('Error: Datos incompletos para seleccionar el horario.');
+                    return;
+                }
+
+                // Deshabilitar el botón mientras se procesa la solicitud
+                chooseButton.disabled = true;
+                chooseButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cargando...';
+
+
+                // Crear un objeto FormData para enviar los datos al servidor
+                const formData = new FormData();
+                formData.append('id_enrollment', enrollmentId);
+                formData.append('id_horario', horarioId);
+
+                // Enviar la solicitud POST usando Fetch API
+                fetch('../api/actualizar_horario_inscripcion.php', {
+                    method: 'POST',
+                    body: formData // Aquí es donde se usa FormData
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            showAlert('Horario seleccionado exitosamente.', 'success');
+
+                            // Actualiza la UI:
+                            // 1. Cambia el estado a "Confirmada"
+                            const statusBadge = document.getElementById(`status-${enrollmentId}`);
+                            if (statusBadge) {
+                                statusBadge.classList.remove('bg-warning', 'text-dark');
+                                statusBadge.classList.add('bg-success');
+                                statusBadge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Confirmada';
+                            }
+
+                            // 2. Oculta el botón "Elegir Turno/Profesor" para esta inscripción y lo reemplaza
+                            const selectButton = document.getElementById(`select-btn-${enrollmentId}`);
+                            if (selectButton) {
+                                const newButton = document.createElement('button');
+                                newButton.className = 'btn btn-sm btn-secondary';
+                                newButton.disabled = true;
+                                newButton.textContent = 'Turno Asignado';
+                                selectButton.replaceWith(newButton);
+                            }
+
+                            // 3. Muestra los detalles del horario seleccionado
+                            const horarioInfoDiv = document.getElementById(`horario-info-${enrollmentId}`);
+                            if (horarioInfoDiv && data.horario_details) {
+                                let horarioDetailsHtml = '<small class="text-muted">';
+                                horarioDetailsHtml += `Profesor: ${data.horario_details.nombre_completo}<br>`;
+                                horarioDetailsHtml += `Turno: ${data.horario_details.turno} (${data.horario_details.hora_inicio.substring(0, 5)} - ${data.horario_details.hora_fin.substring(0, 5)})<br>`;
+                                horarioDetailsHtml += `Día: ${data.horario_details.dia_semana}<br>`;
+                                horarioDetailsHtml += `Aula: ${data.horario_details.nombre_aula}`;
+                                horarioDetailsHtml += '</small>';
+                                horarioInfoDiv.innerHTML = horarioDetailsHtml;
+                                horarioInfoDiv.style.display = 'block'; // Asegúrate de que esté visible
+                            }
+
+                            // Cierra el modal
+                            const selectHorarioModal = bootstrap.Modal.getInstance(document.getElementById('selectHorarioModal'));
+                            if (selectHorarioModal) {
+                                selectHorarioModal.hide();
+                            }
+
+                        } else {
+                            showAlert(`Error al seleccionar el horario: ${data.message}`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Fetch Error:", error);
+                        showAlert('Error de conexión al seleccionar el horario. Por favor, intente de nuevo.');
+                    })
+                    .finally(() => {
+                        // Habilitar el botón nuevamente en caso de error
+                        chooseButton.disabled = false;
+                        chooseButton.innerHTML = '<i class="fas fa-check-circle me-1"></i> Elegir';
+                    });
+            }
+        });
+    });
+</script>
 
 <script>
     // Variables globales que no dependen del contenido del modal
@@ -547,7 +764,7 @@ if ($current_semester) {
                 if (reprobadasObligatorias) {
                     reprobadasObligatorias.forEach(checkbox => {
                         if (checkbox.checked && checkbox.disabled) { // Only add if they are checked AND disabled (mandatory)
-                             selectedValues.add(checkbox.value);
+                            selectedValues.add(checkbox.value);
                         }
                     });
                 }
