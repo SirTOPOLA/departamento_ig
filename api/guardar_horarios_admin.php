@@ -21,22 +21,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $turno = sanitize_input($_POST['turno'] ?? '');
 
 
-    
+
 
     if ($action === 'delete') {
-        if ($id_horario === null  ) {
+        if ($id_horario === null) {
             set_flash_message('danger', 'Error: ID de horario no válido para eliminación.');
         } else {
-            $stmt = $pdo->prepare("DELETE FROM horarios WHERE id = :id_horario");
-            $stmt->bindParam(':id_horario', $id_horario, PDO::PARAM_INT);
+            try {
+                $stmt = $pdo->prepare("DELETE FROM horarios WHERE id = :id_horario");
+                $stmt->bindParam(':id_horario', $id_horario, PDO::PARAM_INT);
+                $stmt->execute();
 
-            if ($stmt->execute()) { // Verifica si la ejecución fue exitosa
-                set_flash_message('success', 'Horario eliminado correctamente.');
-            } else {
-                set_flash_message('danger', 'Error al eliminar el horario.');
+                // Comprobación de filas afectadas para confirmar eliminación
+                if ($stmt->rowCount() > 0) {
+                    set_flash_message('success', 'Horario eliminado correctamente.');
+                } else {
+                    set_flash_message('warning', 'No se encontró el horario especificado o ya fue eliminado.');
+                }
+            } catch (PDOException $e) {
+                // Verifica si el error es por restricción de clave foránea
+                if ($e->getCode() === '23000') {
+                    set_flash_message('danger', 'No se puede eliminar este horario porque está vinculado con inscripciones o registros académicos.');
+                } else {
+                    set_flash_message('danger', 'Error inesperado al eliminar el horario: ' . $e->getMessage());
+                }
             }
         }
-    } else { 
+    } else {
 
         // Validaciones básicas
         if (empty($id_semestre) || empty($id_asignatura) || empty($id_curso) || empty($id_profesor) || empty($id_aula) || empty($dia_semana) || empty($hora_inicio) || empty($hora_fin) || empty($turno)) {

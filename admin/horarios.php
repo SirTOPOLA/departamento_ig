@@ -327,6 +327,35 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
 <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
 </div>
 
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Obtenemos una referencia al modal de confirmación
+    const confirmDeleteModal = document.getElementById('confirmDeleteModal');
+
+    // Verificamos que el modal exista antes de intentar añadir un listener
+    if (confirmDeleteModal) {
+        // Añadimos un listener para el evento 'show.bs.modal' de Bootstrap.
+        // Este evento se dispara justo antes de que el modal se muestre.
+        confirmDeleteModal.addEventListener('show.bs.modal', function (event) {
+            // 'event.relatedTarget' es el elemento HTML que activó el modal (en este caso, el botón de "Eliminar").
+            const button = event.relatedTarget;
+
+            // Extraemos el valor del atributo 'data-id-horario' del botón.
+            const idHorario = button.getAttribute('data-id-horario');
+
+            // Obtenemos una referencia al input oculto dentro del formulario del modal.
+            const deleteHorarioIdInput = confirmDeleteModal.querySelector('#deleteHorarioId');
+
+            // Asignamos el ID del horario al valor del input oculto.
+            if (deleteHorarioIdInput) {
+                deleteHorarioIdInput.value = idHorario;
+            }
+        });
+    }
+});
+</script>
 <script>
     const flashMessages = <?php echo json_encode($flash_messages); ?>;
     const horariosModal = new bootstrap.Modal(document.getElementById('horariosModal'));
@@ -374,10 +403,7 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
     flashMessages.forEach(msg => {
         showToast(msg.message, msg.type);
     });
-   /*  document.getElementById('addNewhorariosBtn').addEventListener('click', function() {
-        document.getElementById('horariosModalLabel').textContent = 'Añadir Nuevo Horario';
-        document.getElementById('horariosForm').reset(); // Limpiar formulario
-    }); */
+    
     // --- Funcionalidad para botón "Nuevo Horario" ---
     document.getElementById('addNewhorariosBtn').addEventListener('click', function () {
         document.getElementById('horariosForm').reset();
