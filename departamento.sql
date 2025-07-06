@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 05-07-2025 a las 18:18:30
+-- Tiempo de generación: 06-07-2025 a las 03:47:53
 -- Versión del servidor: 10.4.32-MariaDB
 -- Versión de PHP: 8.2.12
 
@@ -129,17 +129,6 @@ CREATE TABLE `curso_estudiante` (
   `fecha_registro` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `curso_estudiante`
---
-
-INSERT INTO `curso_estudiante` (`id`, `id_estudiante`, `id_curso`, `id_anio`, `estado`, `fecha_registro`) VALUES
-(8, 13, 1, 1, 'activo', '2025-07-05 13:49:00'),
-(9, 12, 1, 1, 'activo', '2025-07-05 15:31:53'),
-(10, 11, 1, 1, 'activo', '2025-07-05 15:32:13'),
-(11, 2, 1, 1, 'activo', '2025-07-05 15:32:35'),
-(12, 1, 1, 1, 'activo', '2025-07-05 15:32:54');
-
 -- --------------------------------------------------------
 
 --
@@ -174,13 +163,6 @@ CREATE TABLE `departamento` (
   `horario` varchar(30) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `departamento`
---
-
-INSERT INTO `departamento` (`id_departamento`, `nombre`, `universidad`, `historia`, `imagen`, `logo_unge`, `logo_pais`, `info_matricula`, `direccion`, `telefono`, `horario`) VALUES
-(1, 'DEPARTAMENTO DE INFOIRMATICA DE GESTION', 'UNIVERSIDAD NACIONAL DE GE', '', 'uploads/configuracion/6868606212b5f.jpg', 'uploads/configuracion/68686062134d3.jpg', NULL, '', '', '', '');
-
 -- --------------------------------------------------------
 
 --
@@ -192,17 +174,6 @@ CREATE TABLE `estudiantes` (
   `id_usuario` int(11) NOT NULL,
   `codigo_registro` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Volcado de datos para la tabla `estudiantes`
---
-
-INSERT INTO `estudiantes` (`id`, `id_usuario`, `codigo_registro`) VALUES
-(1, 12, 'FCE218'),
-(2, 13, 'FCE217'),
-(11, 22, 'FC1E216'),
-(12, 23, 'FC1E215'),
-(13, 25, 'FCE215');
 
 -- --------------------------------------------------------
 
@@ -235,17 +206,6 @@ CREATE TABLE `historial_academico` (
   `fecha_actualizacion` datetime DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `historial_academico`
---
-
-INSERT INTO `historial_academico` (`id`, `id_estudiante`, `id_asignatura`, `id_semestre`, `nota_final`, `estado_final`, `fecha_actualizacion`) VALUES
-(1, 12, 14, 2, 0.00, '', '2025-07-01 16:03:18'),
-(2, 12, 11, 2, 0.00, '', '2025-07-01 16:03:22'),
-(3, 1, 11, 2, 5.00, 'APROBADO', '2025-07-05 02:53:25'),
-(4, 12, 11, 2, 4.00, 'REPROBADO', '2025-07-05 02:53:25'),
-(8, 13, 11, 2, 6.00, 'APROBADO', '2025-07-05 15:24:01');
-
 -- --------------------------------------------------------
 
 --
@@ -262,15 +222,6 @@ CREATE TABLE `horarios` (
   `hora_fin` time NOT NULL,
   `turno` enum('Tarde','Noche') NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Volcado de datos para la tabla `horarios`
---
-
-INSERT INTO `horarios` (`id`, `id_grupo_asignatura`, `id_semestre`, `id_aula`, `dia_semana`, `hora_inicio`, `hora_fin`, `turno`) VALUES
-(2, NULL, 2, 1, 'Lunes', '12:00:00', '13:00:00', 'Tarde'),
-(4, NULL, 2, 1, 'Martes', '16:00:00', '18:00:00', 'Noche'),
-(5, NULL, 2, 1, 'Miércoles', '12:00:00', '13:00:00', 'Tarde');
 
 -- --------------------------------------------------------
 
@@ -321,14 +272,6 @@ CREATE TABLE `profesores` (
   `grado_academico` varchar(100) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `profesores`
---
-
-INSERT INTO `profesores` (`id`, `id_usuario`, `especialidad`, `grado_academico`) VALUES
-(1, 9, 'Matematicas', 'Licenciatura'),
-(2, 24, 'Bases de datos', 'Master');
-
 -- --------------------------------------------------------
 
 --
@@ -342,16 +285,6 @@ CREATE TABLE `profesores_asignaturas_asignadas` (
   `fecha_asignacion` datetime DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `profesores_asignaturas_asignadas`
---
-
-INSERT INTO `profesores_asignaturas_asignadas` (`id`, `id_profesor`, `id_asignatura`, `fecha_asignacion`) VALUES
-(1, 1, 11, '2025-07-01 13:56:26'),
-(2, 2, 14, '2025-07-01 15:13:41'),
-(3, 1, 1, '2025-07-05 14:49:44'),
-(4, 1, 6, '2025-07-05 14:49:55');
-
 -- --------------------------------------------------------
 
 --
@@ -364,16 +297,6 @@ CREATE TABLE `profesores_asignaturas_sugeridas` (
   `id_asignatura` int(11) NOT NULL,
   `fecha_sugerencia` datetime DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Volcado de datos para la tabla `profesores_asignaturas_sugeridas`
---
-
-INSERT INTO `profesores_asignaturas_sugeridas` (`id`, `id_profesor`, `id_asignatura`, `fecha_sugerencia`) VALUES
-(1, 9, 11, '2025-06-29 15:08:19'),
-(2, 1, 6, '2025-06-30 01:02:32'),
-(8, 1, 4, '2025-07-05 14:46:50'),
-(9, 1, 13, '2025-07-05 14:47:02');
 
 -- --------------------------------------------------------
 
@@ -394,13 +317,6 @@ CREATE TABLE `publicaciones` (
   `creado_en` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `publicaciones`
---
-
-INSERT INTO `publicaciones` (`id_publicacion`, `titulo`, `contenido`, `tipo`, `imagen`, `archivo_adjunto`, `fecha_evento`, `visible`, `creado_por`, `creado_en`) VALUES
-(1, 'EDDED', 'DEDEDE', 'noticia', '../uploads/6863c2bd501bf.jpg', NULL, '2025-07-01', 1, 1, '2025-07-01 11:13:01');
-
 -- --------------------------------------------------------
 
 --
@@ -416,13 +332,6 @@ CREATE TABLE `requisitos_matricula` (
   `archivo_modelo` text DEFAULT NULL,
   `visible` tinyint(1) DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Volcado de datos para la tabla `requisitos_matricula`
---
-
-INSERT INTO `requisitos_matricula` (`id_requisito`, `titulo`, `descripcion`, `tipo`, `obligatorio`, `archivo_modelo`, `visible`) VALUES
-(1, 'MATRUCULA', 'ADEADEW', 'antiguo', 1, '../uploads/6863c30040798.pdf', 1);
 
 -- --------------------------------------------------------
 
@@ -459,16 +368,6 @@ CREATE TABLE `semestres` (
   `id_curso_asociado_al_semestre` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Volcado de datos para la tabla `semestres`
---
-
-INSERT INTO `semestres` (`id`, `id_anio_academico`, `numero_semestre`, `fecha_inicio`, `fecha_fin`, `id_curso_asociado_al_semestre`) VALUES
-(1, 1, 1, '2024-10-29', '2025-01-22', 1),
-(2, 1, 2, '2025-02-14', '2025-07-22', 1),
-(4, 1, 3, '2024-09-29', '2025-02-01', 2),
-(5, 1, 4, '2025-01-29', '2025-07-07', 2);
-
 -- --------------------------------------------------------
 
 --
@@ -493,14 +392,7 @@ CREATE TABLE `usuarios` (
 --
 
 INSERT INTO `usuarios` (`id`, `nombre_usuario`, `password_hash`, `id_rol`, `nombre_completo`, `email`, `telefono`, `nip`, `estado`, `fecha_registro`) VALUES
-(1, 'hakim', '$2y$10$JixeWVxhWCJztjbrUA2lBuLaiQRSJfE9FBiGi/PMIE94r.5rTXkEK', 1, 'Hakim Pergentino', 'perduino@gmail.com', '222001122', '011243', 'Activo', '2025-06-29 11:27:07'),
-(9, 'salvador', '$2y$10$Va/cU6tiX4GLCBBtlDskRu3LL3NFba8iAU0O3o0kYQN..R7lzj8Uu', 3, 'Salvador Alo', 'salvador@gmail.com', '222011545', '0112430', 'Activo', '2025-06-29 14:48:52'),
-(12, 'melania', '$2y$10$7M/rOsyFDa.1FAv08iMrNuVC.Pz8JECDC2jCaQtzFdX5mD0tWS9/C', 2, 'Melania Sima', 'sima@gmail.com', '555120124', '0112431', 'Activo', '2025-06-29 16:19:54'),
-(13, 'mia', '$2y$10$n5is0tAZ/.uL47tQfLUk.e3SSVPxi03hJBjTK8GCFDq6sl6cFWaZG', 2, 'Mia Antonia Supe', 'mia@gmail.com', '222457487', '0014521', 'Activo', '2025-07-01 11:59:12'),
-(22, 'lucia', '$2y$10$xbuencvwlP43ow9tkj.OhOXWH28uVdivIKW/BF1qWn7wi1xVoyi5O', 2, 'Lucia Boko', 'lucia@gmail.com', '222457896', '000914578', 'Activo', '2025-07-01 13:27:02'),
-(23, 'monica', '$2y$10$8daDKLkojNalZU.Wt2FGCuRLO9aSKli8SQfN/EBH26J179ZRCm.nq', 2, 'monica mons', 'monica@gmail.com', '222145014', '0012101', 'Activo', '2025-07-01 14:01:54'),
-(24, 'nestor', '$2y$10$qILSO7a.vvBVvDJLolrpi.TTBL.UsdjBczIrnwcff1nFXPFiddVNC', 3, 'Nestor Mba', 'nestor@gmail.com', '222014578', '000124570', 'Activo', '2025-07-01 15:13:17'),
-(25, 'bomala', '$2y$10$Lbr7Ztx4LT8FEc7JCioaE.UZALlcx7hzqU1G1cwpO/jJwJsx0rGqG', 2, 'Benjamin Bomala', 'benja@gmail.com', '222145785', '00124579', 'Activo', '2025-07-05 14:49:00');
+(1, 'hakim', '$2y$10$JixeWVxhWCJztjbrUA2lBuLaiQRSJfE9FBiGi/PMIE94r.5rTXkEK', 1, 'Hakim Pergentino', 'perduino@gmail.com', '222001122', '011243', 'Activo', '2025-06-29 11:27:07');
 
 --
 -- Índices para tablas volcadas
@@ -634,7 +526,8 @@ ALTER TABLE `profesores_asignaturas_asignadas`
 ALTER TABLE `profesores_asignaturas_sugeridas`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `id_profesor` (`id_profesor`,`id_asignatura`),
-  ADD KEY `fk_asignatura_sugerida` (`id_asignatura`);
+  ADD KEY `fk_asignatura_sugerida` (`id_asignatura`),
+  ADD KEY `idx_profesor_asignatura` (`id_profesor`,`id_asignatura`);
 
 --
 -- Indices de la tabla `publicaciones`
@@ -712,7 +605,7 @@ ALTER TABLE `curso_estudiante`
 -- AUTO_INCREMENT de la tabla `cvs_profesores`
 --
 ALTER TABLE `cvs_profesores`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
 
 --
 -- AUTO_INCREMENT de la tabla `departamento`
@@ -730,37 +623,37 @@ ALTER TABLE `estudiantes`
 -- AUTO_INCREMENT de la tabla `grupos_asignaturas`
 --
 ALTER TABLE `grupos_asignaturas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `historial_academico`
 --
 ALTER TABLE `historial_academico`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
 
 --
 -- AUTO_INCREMENT de la tabla `horarios`
 --
 ALTER TABLE `horarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT de la tabla `inscripciones_estudiantes`
 --
 ALTER TABLE `inscripciones_estudiantes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
 
 --
 -- AUTO_INCREMENT de la tabla `notas`
 --
 ALTER TABLE `notas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT de la tabla `profesores`
 --
 ALTER TABLE `profesores`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT de la tabla `profesores_asignaturas_asignadas`
@@ -772,7 +665,7 @@ ALTER TABLE `profesores_asignaturas_asignadas`
 -- AUTO_INCREMENT de la tabla `profesores_asignaturas_sugeridas`
 --
 ALTER TABLE `profesores_asignaturas_sugeridas`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT de la tabla `publicaciones`
@@ -802,7 +695,7 @@ ALTER TABLE `semestres`
 -- AUTO_INCREMENT de la tabla `usuarios`
 --
 ALTER TABLE `usuarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=27;
 
 --
 -- Restricciones para tablas volcadas
@@ -891,8 +784,7 @@ ALTER TABLE `profesores_asignaturas_asignadas`
 -- Filtros para la tabla `profesores_asignaturas_sugeridas`
 --
 ALTER TABLE `profesores_asignaturas_sugeridas`
-  ADD CONSTRAINT `fk_asignatura_sugerida` FOREIGN KEY (`id_asignatura`) REFERENCES `asignaturas` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_profesor_sugiere` FOREIGN KEY (`id_profesor`) REFERENCES `profesores` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_asignatura_sugerida` FOREIGN KEY (`id_asignatura`) REFERENCES `asignaturas` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Filtros para la tabla `publicaciones`

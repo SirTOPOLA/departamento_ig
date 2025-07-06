@@ -2,7 +2,7 @@
 // reports/generate_historial_pdf.php
 
 // Incluir FPDF
-require('fpdf.php'); // Ajusta la ruta si es necesario
+require('fpdf.php'); // Ajusta esta ruta si tu carpeta fpdf está en otro lugar
 require_once '../includes/functions.php'; // Para funciones auxiliares si las tienes
 require_once '../config/database.php';   // Para la conexión a la base de datos
 
@@ -10,7 +10,6 @@ require_once '../config/database.php';   // Para la conexión a la base de datos
 $id_usuario = filter_var($_GET['id_usuario'] ?? null, FILTER_VALIDATE_INT);
 
 if (!$id_usuario) {
-    // Si no hay ID, redirigir o mostrar un error simple (no JSON aquí)
     die('ID de usuario no proporcionado o inválido para generar el historial.');
 }
 
@@ -27,12 +26,8 @@ try {
 
     // --- 2. Obtener los datos del historial académico y del estudiante ---
     // Consulta SQL optimizada para obtener el historial académico
-    // Utiliza la lógica con ROW_NUMBER() si tu MySQL/MariaDB es 8.0+/10.2+ (Recomendado)
-    // O la lógica sin ROW_NUMBER() si tu base de datos es más antigua.
-    // **Asegúrate de pegar aquí la consulta SQL FINALMENTE ELEGIDA y probada**
+    // Esta estructura de consulta asume MySQL 8.0+ / MariaDB 10.2+ para ROW_NUMBER()
     $stmt_historial = $pdo->prepare("
-        -- Aquí va la consulta SQL que me proporcionaste y que funciona correctamente
-        -- Por ejemplo, si usas la versión con ROW_NUMBER():
         WITH RankedHistory AS (
             SELECT
                 ha.id AS id_historial,
@@ -106,61 +101,116 @@ try {
         die('No se pudieron obtener los detalles del estudiante.');
     }
 
-    // --- 3. Definir la clase PDF personalizada ---
-    // Esto permite crear un diseño de encabezado y pie de página consistente y elegante.
+    // --- 3. Obtener detalles del Departamento/Institución para encabezados/pies de página ---
+    // Asumimos que la tabla 'departamento' contiene los detalles de la institución principal (ej. id_departamento = 1)
+    // Y que el nombre del departamento para Informática de Gestión está en un registro con id_departamento específico
+    $stmt_institution = $pdo->prepare("
+        SELECT nombre, universidad, logo_unge
+        FROM departamento
+        WHERE id_departamento = 1 -- Ajusta este ID si tu institución principal tiene un ID diferente
+        LIMIT 1
+    ");
+    $stmt_institution->execute();
+    $institution_details = $stmt_institution->fetch(PDO::FETCH_ASSOC);
+
+    // Obtener nombre del departamento específico
+    $stmt_department = $pdo->prepare("
+        SELECT nombre
+        FROM departamento
+        
+        LIMIT 1
+    ");
+    $stmt_department->execute();
+    $specific_department_name = $stmt_department->fetchColumn();
+
+    // Proporcionar valores por defecto si los detalles no se encuentran
+    $institutionName = $institution_details['universidad'] ?? 'UNIVERSIDAD NACIONAL DE GUINEA ECUATORIAL';
+    $facultyName = 'Facultad de Ciencias Económicas'; // Nombre de la facultad fijo
+    $departmentName = $specific_department_name ?? 'Departamento de Informática de Gestión'; // Nombre del departamento, con fallback
+    $ungeLogoPath = $institution_details['logo_unge'] ?? '../assets/img/logo_unge.png'; // Ruta por defecto al logo UNGE
+
+    // Ajustar la ruta del logo si se almacena sin el prefijo '../'
+    if ($ungeLogoPath && strpos($ungeLogoPath, '../') !== 0 && file_exists('../' . $ungeLogoPath)) {
+        $ungeLogoPath = '../' . $ungeLogoPath;
+    }
+
+
+    // --- 4. Definir la clase PDF personalizada ---
     class PDF extends FPDF
     {
-        // Propiedades para un diseño más limpio
         private $headerTitle = 'Historial Académico Estudiantil';
-        private $headerSubtitle = 'Informe Detallado de Notas y Semestres';
-        private $logoPath = '../assets/img/logo_institucion.png'; // Ruta a tu logo
-        private $institutionName = 'Nombre de Tu Institución'; // Nombre de tu institución
+        private $ungeLogoPath;
+        private $institutionName;
+        private $facultyName;
+        private $departmentName;
         private $studentName;
-        private $studentMatricula;
+        private $studentRegistrationCode;
 
-        // Constructor para pasar datos del estudiante
-        function __construct($orientation = 'P', $unit = 'mm', $size = 'A4', $studentName = '', $studentMatricula = '')
+        function __construct($orientation = 'P', $unit = 'mm', $size = 'A4', $studentName = '', $studentRegistrationCode = '', $institutionName = '', $facultyName = '', $departmentName = '', $ungeLogoPath = '')
         {
             parent::__construct($orientation, $unit, $size);
             $this->studentName = $studentName;
-            $this->studentMatricula = $studentMatricula;
+            $this->studentRegistrationCode = $studentRegistrationCode;
+            $this->institutionName = $institutionName;
+            $this->facultyName = $facultyName;
+            $this->departmentName = $departmentName;
+            $this->ungeLogoPath = $ungeLogoPath;
         }
 
         // Encabezado
         function Header()
         {
-            // Logo
-            if (file_exists($this->logoPath)) {
-                $this->Image($this->logoPath, 10, 8, 25); // X, Y, Ancho (ajusta según tu logo)
+            // Logo UNGE (Izquierda) - Aumentar un poco el tamaño Y para el espacio
+            $logoHeight = 25; // Alto del logo
+            if (file_exists($this->ungeLogoPath)) {
+                $this->Image(utf8_decode($this->ungeLogoPath), 10, 8, $logoHeight); // X, Y, Alto
             } else {
-                // Si no hay logo, puedes poner un texto o dejar un espacio
-                $this->SetFont('Arial', 'B', 14);
+                $this->SetFont('Arial', 'B', 10);
                 $this->SetTextColor(50, 50, 50);
-                $this->Cell(30, 10, $this->institutionName, 0, 0, 'L');
+                $this->Cell(30, 10, utf8_decode('UNGE'), 0, 0, 'L');
             }
 
-            // Título del documento
-            $this->SetFont('Arial', 'B', 18);
-            $this->SetTextColor(30, 30, 100); // Azul oscuro institucional
-            $this->Cell(0, 10, $this->headerTitle, 0, 1, 'C'); // Centrado
+            // Establecer posición para los textos del encabezado (a la derecha del logo)
+            $textStartX = 40; // Donde empieza el texto, después del logo (10 + 25 + 5 de margen)
+            $this->SetX($textStartX);
 
-            // Subtítulo
-            $this->SetFont('Arial', '', 10);
-            $this->SetTextColor(100, 100, 100); // Gris
-            $this->Cell(0, 7, $this->headerSubtitle, 0, 1, 'C');
-            $this->Ln(5); // Salto de línea
+            // Nombre de la Institución (al lado del logo, letra de título)
+            $this->SetFont('Arial', 'B', 14);
+            $this->SetTextColor(30, 30, 100); // Azul oscuro institucional
+            $this->Cell(0, 7, utf8_decode($this->institutionName), 0, 1, 'L'); // 'L' para alinear a la izquierda del área de celda
+
+            // Facultad de Ciencias Económicas y Empresariales
+            $this->SetX($textStartX);
+            $this->SetFont('Arial', 'B', 12);
+            $this->SetTextColor(50, 50, 50); // Un color un poco más suave
+            $this->Cell(0, 6, utf8_decode($this->facultyName), 0, 1, 'L');
+
+            // Nombre del Departamento
+            $this->SetX($textStartX);
+            $this->SetFont('Arial', '', 11); // Fuente normal, tamaño un poco más pequeño
+            $this->SetTextColor(80, 80, 80); // Gris más claro
+            $this->Cell(0, 6, utf8_decode($this->departmentName), 0, 1, 'L');
+            $this->Ln(3); // Pequeño espacio
+
+            // Título principal del documento (centrado debajo de la información institucional)
+            // Resetear X para centrar en todo el ancho
+            $this->SetX(10);
+            $this->SetFont('Arial', 'B', 16);
+            $this->SetTextColor(30, 30, 100);
+            $this->Cell(0, 10, utf8_decode($this->headerTitle), 0, 1, 'C');
+            $this->Ln(2); // Salto de línea
 
             // Línea separadora
-            $this->SetDrawColor(0, 128, 255); // Azul
+            $this->SetDrawColor(0, 128, 255); // Azul institucional
             $this->SetLineWidth(0.5);
-            $this->Line(10, 35, 200, 35); // X1, Y1, X2, Y2
-
-            // Información del estudiante
-            $this->SetFont('Arial', 'B', 12);
-            $this->SetTextColor(0, 0, 0); // Negro
+            $this->Line(10, $this->GetY(), 200, $this->GetY()); // Usar GetY() para la posición actual
             $this->Ln(5); // Espacio después de la línea
-            $this->Cell(0, 7, 'Estudiante: ' . utf8_decode($this->studentName), 0, 0, 'L');
-            $this->Cell(0, 7, 'Matrícula: ' . utf8_decode($this->studentMatricula), 0, 1, 'R');
+
+            // Información del estudiante (debajo de la línea separadora)
+            $this->SetFont('Arial', 'B', 11);
+            $this->SetTextColor(0, 0, 0); // Negro
+            $this->Cell(0, 7, utf8_decode('Estudiante: ') . utf8_decode($this->studentName), 0, 0, 'L');
+            $this->Cell(0, 7, utf8_decode('Cód. Registro: ') . utf8_decode($this->studentRegistrationCode), 0, 1, 'R');
             $this->Ln(5); // Espacio antes de la tabla
         }
 
@@ -177,7 +227,7 @@ try {
             $this->Cell(0, 10, utf8_decode($this->institutionName . ' - Generado el: ' . date('d/m/Y H:i')), 0, 0, 'R');
         }
 
-        // Función para dibujar una tabla con estilo
+        // Función para dibujar una tabla con estilo mejorado
         function ImprovedTable($header, $data)
         {
             // Anchuras de las columnas (ajusta según tus necesidades y el contenido)
@@ -188,7 +238,7 @@ try {
             $this->SetLineWidth(0.3);
             $this->SetFont('Arial', 'B', 10);
 
-            // Cabecera
+            // Cabecera de la tabla
             for ($i = 0; $i < count($header); $i++) {
                 $this->Cell($w[$i], 7, utf8_decode($header[$i]), 1, 0, 'C', true);
             }
@@ -201,19 +251,28 @@ try {
 
             $fill = false; // Para alternar colores de fila
             foreach ($data as $row) {
+                // Asegurar que el texto se ajuste a las celdas y los caracteres especiales se manejen
                 $this->Cell($w[0], 6, utf8_decode($row['nombre_asignatura']), 'LR', 0, 'L', $fill);
                 $this->Cell($w[1], 6, utf8_decode($row['numero_semestre']), 'LR', 0, 'C', $fill);
-                // Formatear el año académico para incluir el rango del semestre
-                $anioSemestre = utf8_decode($row['anio_academico']);
-                if (!empty($row['semestre_inicio']) && !empty($row['semestre_fin'])) {
-                     // Solo mostrar el rango de años del semestre si es diferente al anio_academico global
-                    $startYear = substr($row['semestre_inicio'], 0, 4);
-                    $endYear = substr($row['semestre_fin'], 0, 4);
-                    if ($startYear !== $anioSemestre && $endYear !== $anioSemestre) {
-                         $anioSemestre .= ' (' . $startYear . '-' . $endYear . ')';
+                
+                // CORRECCIÓN: Formatear el año académico para evitar la duplicación
+                // Si el año académico es igual al año de inicio del semestre, solo muestra el año académico.
+                // Si son diferentes, muestra el año académico y el rango del semestre entre paréntesis.
+                $anioAcademico = utf8_decode($row['anio_academico']);
+                $semestreInicioYear = substr($row['semestre_inicio'], 0, 4);
+                $semestreFinYear = substr($row['semestre_fin'], 0, 4);
+                
+                $displayAnio = $anioAcademico;
+                if ($semestreInicioYear !== $anioAcademico || $semestreFinYear !== $anioAcademico) {
+                    // Solo si el año académico es diferente al rango del semestre, añadimos el rango
+                    if ($semestreInicioYear == $semestreFinYear) {
+                         $displayAnio .= ' (' . $semestreInicioYear . ')';
+                    } else {
+                         $displayAnio .= ' (' . $semestreInicioYear . '-' . $semestreFinYear . ')';
                     }
                 }
-                $this->Cell($w[2], 6, $anioSemestre, 'LR', 0, 'C', $fill);
+                
+                $this->Cell($w[2], 6, $displayAnio, 'LR', 0, 'C', $fill);
                 $this->Cell($w[3], 6, number_format($row['nota_final'], 2), 'LR', 0, 'C', $fill);
                 
                 // Estilo para el estado
@@ -224,7 +283,7 @@ try {
                 } elseif ($row['estado_final'] === 'REPROBADO') {
                     $this->SetTextColor(200, 0, 0); // Rojo
                 } else {
-                    $this->SetTextColor(100, 100, 0); // Naranja/Marrón para Pendiente
+                    $this->SetTextColor(100, 100, 0); // Naranja/Marrón para Pendiente/Otro
                 }
                 $this->Cell($w[4], 6, $estado, 'LR', 0, 'C', $fill);
                 
@@ -232,19 +291,26 @@ try {
                 $this->Ln();
                 $fill = !$fill; // Alternar color
             }
-            // Línea de cierre
+            // Línea de cierre de la tabla
             $this->Cell(array_sum($w), 0, '', 'T');
             $this->Ln(10); // Espacio después de la tabla
         }
     }
 
-    // --- 4. Instanciar y configurar el PDF ---
-    $pdf = new PDF('P', 'mm', 'A4', $student_details['nombre_completo'], $student_details['codigo_registro']);
+    // --- 5. Instanciar y configurar el PDF ---
+    // Pasar los detalles dinámicos de la institución al constructor de la clase PDF
+    $pdf = new PDF('P', 'mm', 'A4',
+                   $student_details['nombre_completo'],
+                   $student_details['codigo_registro'],
+                   $institutionName,
+                   $facultyName,
+                   $departmentName,
+                   $ungeLogoPath);
     $pdf->AliasNbPages(); // Necesario para el conteo total de páginas
     $pdf->AddPage();
-    $pdf->SetMargins(10, 10, 10); // Margenes (izquierda, arriba, derecha)
+    $pdf->SetMargins(10, 10, 10); // Márgenes (izquierda, arriba, derecha)
 
-    // --- 5. Añadir el contenido de la tabla ---
+    // --- 6. Añadir el contenido de la tabla ---
     if (!empty($historial_academico)) {
         $header = ['Asignatura', 'Semestre', 'Año Académico', 'Nota Final', 'Estado'];
         $pdf->ImprovedTable($header, $historial_academico);
@@ -254,14 +320,14 @@ try {
         $pdf->Cell(0, 10, utf8_decode('No hay historial académico disponible para este estudiante.'), 0, 1, 'C');
     }
 
-    // --- 6. Salida del PDF ---
+    // --- 7. Salida del PDF ---
     // 'I' para mostrar en el navegador, 'D' para forzar descarga, 'F' para guardar en el servidor
-    $filename = 'Historial_Academico_' . str_replace(' ', '_', $student_details['nombre_completo']) . '.pdf';
+    $filename = 'Historial_Academico_' . str_replace(' ', '_', utf8_decode($student_details['nombre_completo'])) . '.pdf';
     $pdf->Output('I', $filename);
 
 } catch (PDOException $e) {
     error_log("Error de BD al generar PDF: " . $e->getMessage());
-    die('Error de base de datos al generar el historial PDF.');
+    die('Error de base de datos al generar el historial PDF: ' . $e->getMessage());
 } catch (Exception $e) {
     error_log("Error general al generar PDF: " . $e->getMessage());
     die('Ocurrió un error al generar el historial PDF: ' . $e->getMessage());
