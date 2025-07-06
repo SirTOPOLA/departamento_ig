@@ -18,20 +18,22 @@ unset($_SESSION['flash_message']); // Limpiar el mensaje después de mostrarlo
 // Obtener asignaturas y semestres que el profesor imparte
 try {
     $stmt_clases = $pdo->prepare("
-        SELECT
-            h.id_asignatura,
-            a.nombre_asignatura,
-            h.id_semestre,
-            s.id_anio_academico, /* Añadido para obtener el ID del año académico */
-            CONCAT(s.numero_semestre, ' - ', sa.nombre_anio) AS nombre_semestre_completo
-        FROM horarios h
-        JOIN asignaturas a ON h.id_asignatura = a.id
-        JOIN semestres s ON h.id_semestre = s.id
-        JOIN anios_academicos sa ON s.id_anio_academico = sa.id
-        WHERE h.id_profesor = :profesor_id
-        GROUP BY h.id_asignatura, a.nombre_asignatura, h.id_semestre, s.id_anio_academico, nombre_semestre_completo
-        ORDER BY sa.nombre_anio DESC, s.numero_semestre DESC, a.nombre_asignatura
-    ");
+    SELECT
+        ga.id_asignatura,
+        a.nombre_asignatura,
+        h.id_semestre,
+        s.id_anio_academico,
+        CONCAT(s.numero_semestre, ' - ', sa.nombre_anio) AS nombre_semestre_completo
+    FROM horarios h
+    JOIN grupos_asignaturas ga ON h.id_grupo_asignatura = ga.id
+    JOIN asignaturas a ON ga.id_asignatura = a.id
+    JOIN semestres s ON h.id_semestre = s.id
+    JOIN anios_academicos sa ON s.id_anio_academico = sa.id
+    WHERE ga.id_profesor = :profesor_id
+    GROUP BY ga.id_asignatura, a.nombre_asignatura, h.id_semestre, s.id_anio_academico, nombre_semestre_completo
+    ORDER BY sa.nombre_anio DESC, s.numero_semestre DESC, a.nombre_asignatura
+");
+
     $stmt_clases->execute(['profesor_id' => $profesor_id]);
     $clases = $stmt_clases->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -79,30 +81,37 @@ if ($selected_asignatura_id && $selected_semestre_id && is_null($selected_anio_a
 // Cargar notas de los estudiantes inscritos si hay asignatura y semestre seleccionados
 // Esta parte se ejecuta después del redireccionamiento si el POST fue exitoso,
 // o directamente si la página se carga con GET o por primera vez.
-if ($selected_asignatura_id && $selected_semestre_id) {
+if ($selected_asignatura_id && $selected_semestre_id && $profesor_id) {
     try {
         $stmt_notas = $pdo->prepare("
-            SELECT
-                ie.id AS inscripcion_id,
-                e.id AS estudiante_id,
-                u.nombre_completo AS nombre_estudiante,
-                n.nota,
-                n.estado AS estado_nota_bd,
-                n.estado_envio_acta,
-                n.observaciones_admin
-            FROM inscripciones_estudiantes ie
-            JOIN estudiantes e ON ie.id_estudiante = e.id
-            JOIN usuarios u ON e.id_usuario = u.id
-            LEFT JOIN notas n ON ie.id = n.id_inscripcion
-            WHERE ie.id_asignatura = :asignatura_id
-              AND ie.id_semestre = :semestre_id
-              AND ie.confirmada = 1 -- Asegúrate de que solo se muestren inscripciones confirmadas
-            ORDER BY u.nombre_completo
-        ");
-        $stmt_notas->execute([
-            'asignatura_id' => $selected_asignatura_id,
-            'semestre_id' => $selected_semestre_id
-        ]);
+    SELECT
+        ie.id AS inscripcion_id,
+        e.id AS estudiante_id,
+        u.nombre_completo AS nombre_estudiante,
+        n.nota,
+        n.estado AS estado_nota_bd,
+        n.estado_envio_acta,
+        n.observaciones_admin
+    FROM inscripciones_estudiantes ie
+    JOIN estudiantes e ON ie.id_estudiante = e.id
+    JOIN usuarios u ON e.id_usuario = u.id
+    LEFT JOIN notas n ON ie.id = n.id_inscripcion
+    JOIN grupos_asignaturas ga ON ie.id_grupo_asignatura = ga.id
+    WHERE ga.id_profesor = :profesor_id
+      AND ga.id_asignatura = :asignatura_id
+      AND ie.id_semestre = :semestre_id
+      AND ie.confirmada = 1
+    ORDER BY u.nombre_completo
+");
+
+    
+        
+$stmt_notas->execute([
+    'profesor_id' => $profesor_id,
+    'asignatura_id' => $selected_asignatura_id,
+    'semestre_id' => $selected_semestre_id
+]);
+
         $notas_estudiantes = $stmt_notas->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $message = "Error al cargar la lista de estudiantes inscritos.";
@@ -170,13 +179,7 @@ if ($selected_asignatura_id && $selected_semestre_id) {
                     echo "Asignatura Desconocida"; // Fallback si no se encuentra la info de la clase
                 }
             ?></h2>
-
-            <?php
-            // Mensajes de depuración para los IDs seleccionados
-            echo '<div class="alert alert-secondary mt-3">';
-            echo '<strong>Depuración:</strong> Asignatura ID = ' . htmlspecialchars($selected_asignatura_id) . ', Semestre ID = ' . htmlspecialchars($selected_semestre_id) . ', Año Académico ID = ' . htmlspecialchars($selected_anio_academico_id);
-            echo '</div>';
-            ?>
+ 
 
             <?php if (!empty($notas_estudiantes)): ?>
                 <form method="POST" action="../api/enviar_actas_profesor.php">

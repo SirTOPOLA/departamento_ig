@@ -32,11 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     $inscripcion_ids = array_filter(array_map('intval', explode(',', $inscripcion_ids_str)));
 
-    // DEBUG: Log de IDs de inscripción recibidos
-    error_log("DEBUG (admin/actas.php): Acción recibida: " . $action);
-    error_log("DEBUG (admin/actas.php): IDs de inscripción recibidos: " . implode(',', $inscripcion_ids));
-    error_log("DEBUG (admin/actas.php): Observaciones: " . $observaciones_admin);
-
+   
 
     if (empty($inscripcion_ids)) {
         $message = "No se seleccionaron notas para procesar.";
@@ -177,36 +173,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 $actas = [];
 try {
     $sql = "
-        SELECT
-            n.id AS nota_id,
-            n.id_inscripcion,
-            n.nota,
-            n.estado AS estado_nota,
-            n.estado_envio_acta,
-            n.fecha_envio_acta,
-            n.fecha_revision_admin,
-            n.observaciones_admin,
-            ie.id_estudiante,
-            ie.id_asignatura,
-            ie.id_semestre,
-            u_estudiante.nombre_completo AS nombre_estudiante,
-            a.nombre_asignatura,
-            s.numero_semestre,
-            sa.nombre_anio,
-            u_profesor.nombre_completo AS nombre_profesor,
-            h.id_profesor
-        FROM notas n
-        JOIN inscripciones_estudiantes ie ON n.id_inscripcion = ie.id
-        JOIN estudiantes e ON ie.id_estudiante = e.id
-        JOIN usuarios u_estudiante ON e.id_usuario = u_estudiante.id
-        JOIN asignaturas a ON ie.id_asignatura = a.id
-        JOIN semestres s ON ie.id_semestre = s.id
-        JOIN anios_academicos sa ON s.id_anio_academico = sa.id
-        JOIN horarios h ON ie.id_asignatura = h.id_asignatura AND ie.id_semestre = h.id_semestre
-        JOIN profesores p ON h.id_profesor = p.id
-        JOIN usuarios u_profesor ON p.id_usuario = u_profesor.id
-        WHERE 1=1
-    ";
+    SELECT
+        n.id AS nota_id,
+        n.id_inscripcion,
+        n.nota,
+        n.estado AS estado_nota,
+        n.estado_envio_acta,
+        n.fecha_envio_acta,
+        n.fecha_revision_admin,
+        n.observaciones_admin,
+
+        ie.id_estudiante,
+        ie.id_asignatura,
+        ie.id_semestre,
+
+        u_estudiante.nombre_completo AS nombre_estudiante,
+        a.nombre_asignatura,
+        s.numero_semestre,
+        sa.nombre_anio,
+
+        u_profesor.nombre_completo AS nombre_profesor,
+        ga.id_profesor
+
+    FROM notas n
+    JOIN inscripciones_estudiantes ie ON n.id_inscripcion = ie.id
+    JOIN estudiantes e ON ie.id_estudiante = e.id
+    JOIN usuarios u_estudiante ON e.id_usuario = u_estudiante.id
+    JOIN asignaturas a ON ie.id_asignatura = a.id
+    JOIN semestres s ON ie.id_semestre = s.id
+    JOIN anios_academicos sa ON s.id_anio_academico = sa.id
+
+    -- Nuevas relaciones según estructura actualizada
+    JOIN grupos_asignaturas ga ON ga.id_asignatura = ie.id_asignatura AND ga.id_curso = a.id_curso
+    JOIN profesores p ON ga.id_profesor = p.id
+    JOIN usuarios u_profesor ON p.id_usuario = u_profesor.id
+
+    WHERE 1=1
+";
+
 
     $params = [];
 
@@ -387,7 +391,7 @@ if (isset($_GET['msg'], $_GET['type'])) {
 <div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" action="actas.php">
+            <form method="POST" action="../api/actas.php">
                 <div class="modal-header">
                     <h5 class="modal-title" id="rejectModalLabel">Rechazar Acta</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>

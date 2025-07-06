@@ -166,33 +166,35 @@ try {
 $asignaturasDisponiblesCursoActual = [];
 try {
     $stmtAsignaturasDisponibles = $pdo->prepare("
-        SELECT
-            a.id,
-            a.nombre_asignatura,
-            a.creditos,
-            a.id_prerequisito,
-            pa.nombre_asignatura AS nombre_prerrequisito,
-            c.nombre_curso,
-            a.semestre_recomendado
-        FROM asignaturas a
-        LEFT JOIN asignaturas pa ON a.id_prerequisito = pa.id
-        JOIN cursos c ON a.id_curso = c.id
-        WHERE a.id_curso = :id_curso_estudiante
-        AND a.id NOT IN (
-            SELECT id_asignatura FROM historial_academico
-            WHERE id_estudiante = :id_estudiante_historial_aprobado AND estado_final = 'APROBADO'
-        )
-        AND a.id NOT IN (
-            SELECT id_asignatura FROM inscripciones_estudiantes
-            WHERE id_estudiante = :id_estudiante_inscrito AND id_semestre = :id_semestre_inscrito
-        )
-        AND (
-            (:es_semestre_actual_impar AND (a.semestre_recomendado % 2 != 0))
-            OR
-            (:es_semestre_actual_par AND (a.semestre_recomendado % 2 = 0))
-        )
-        ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC
-    ");
+    SELECT DISTINCT
+        a.id,
+        a.nombre_asignatura,
+        a.creditos,
+        a.id_prerequisito,
+        pa.nombre_asignatura AS nombre_prerrequisito,
+        c.nombre_curso,
+        a.semestre_recomendado
+    FROM asignaturas a
+    LEFT JOIN asignaturas pa ON a.id_prerequisito = pa.id
+    JOIN cursos c ON a.id_curso = c.id
+    JOIN grupos_asignaturas ga ON ga.id_asignatura = a.id -- Asegura que haya al menos un grupo asociado
+    WHERE a.id_curso = :id_curso_estudiante
+      AND a.id NOT IN (
+          SELECT id_asignatura FROM historial_academico
+          WHERE id_estudiante = :id_estudiante_historial_aprobado AND estado_final = 'APROBADO'
+      )
+      AND a.id NOT IN (
+          SELECT id_asignatura FROM inscripciones_estudiantes
+          WHERE id_estudiante = :id_estudiante_inscrito AND id_semestre = :id_semestre_inscrito
+      )
+      AND (
+          (:es_semestre_actual_impar AND (a.semestre_recomendado % 2 != 0))
+          OR
+          (:es_semestre_actual_par AND (a.semestre_recomendado % 2 = 0))
+      )
+    ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC
+");
+
 
     $stmtAsignaturasDisponibles->bindParam(':id_curso_estudiante', $idCursoEstudiante, PDO::PARAM_INT);
     $stmtAsignaturasDisponibles->bindParam(':id_estudiante_historial_aprobado', $idEstudiante, PDO::PARAM_INT);

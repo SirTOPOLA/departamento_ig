@@ -63,6 +63,7 @@ try {
         LEFT JOIN inscripciones_estudiantes ie ON ha.id_estudiante = ie.id_estudiante AND ha.id_asignatura = ie.id_asignatura AND ha.id_semestre = ie.id_semestre
         LEFT JOIN notas n ON ie.id = n.id_inscripcion -- Unir con notas a través de inscripciones_estudiantes
         WHERE ha.id_estudiante = :id_estudiante
+        AND ha.estado_final IN ('APROBADO', 'REPROBADO')
         ORDER BY sa.nombre_anio DESC, c.id ASC, s.numero_semestre ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC
     ");
     $stmtHistorial->bindParam(':id_estudiante', $idEstudiante, PDO::PARAM_INT);
@@ -157,12 +158,18 @@ try {
 
             <hr class="my-4 border-primary">
 
+            <div class="text-end mb-4">
+                <a href="../libreria/generar_pdf_notas.php?id_estudiante=<?php echo $idEstudiante; ?>" class="btn btn-danger btn-lg shadow-sm" target="_blank">
+                    <i class="fas fa-file-pdf me-2"></i> Imprimir PDF
+                </a>
+            </div>
+
             <?php if (empty($historialAcademicoCrudo)): ?>
                 <div class="alert alert-info text-center p-4 rounded-3 shadow-sm">
                     <h4 class="alert-heading"><i class="fas fa-info-circle me-2"></i>¡Historial Vacío!</h4>
-                    <p class="mb-0">Aún no tienes asignaturas registradas en tu historial académico.</p>
+                    <p class="mb-0">Aún no tienes asignaturas registradas en tu historial académico con una calificación final.</p>
                     <hr>
-                    <p class="mb-0">¡Es hora de empezar a inscribirte en asignaturas!</p>
+                    <p class="mb-0">Las asignaturas aparecerán aquí una vez que hayan sido calificadas como APROBADAS o REPROBADAS.</p>
                 </div>
             <?php else: ?>
                 <?php foreach ($historialAgrupado as $anio => $datosAnio): ?>
@@ -220,7 +227,10 @@ try {
                                                         $asignaturasAprobadasSemestre++;
                                                     }
                                                 }
-                                                $estadoSemestre = ($asignaturasAprobadasSemestre === $totalAsignaturasCursadasSemestre && $totalAsignaturasCursadasSemestre > 0) ? 'APROBADO' : 'EN PROGRESO';
+                                                // Un semestre se considera 'APROBADO' si todas sus asignaturas registradas
+                                                // en el historial (que ya tienen estado APROBADO/REPROBADO) están aprobadas.
+                                                // Si no hay asignaturas registradas con estado final, se considera 'EN PROGRESO' por defecto aquí.
+                                                $estadoSemestre = ($totalAsignaturasCursadasSemestre > 0 && $asignaturasAprobadasSemestre === $totalAsignaturasCursadasSemestre) ? 'APROBADO' : 'EN PROGRESO';
                                                 $claseInsigniaSemestre = ($estadoSemestre === 'APROBADO') ? 'success' : 'info';
                                                 $iconoSemestre = ($estadoSemestre === 'APROBADO') ? 'fas fa-check' : 'fas fa-circle';
                                             ?>
@@ -240,11 +250,11 @@ try {
                                                                     <th scope="col" class="text-center">Créditos</th>
                                                                     <th scope="col" class="text-center">Nota Final</th>
                                                                     <th scope="col" class="text-center">Estado</th>
-                                                                    
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
                                                                 <?php foreach ($datosSemestre['asignaturas'] as $asignatura):
+                                                                    // Estas asignaturas ya están filtradas por APROBADO/REPROBADO por la consulta SQL
                                                                     $claseInsigniaAsignatura = ($asignatura['estado_final'] === 'APROBADO') ? 'success' : 'danger';
                                                                     $iconoAsignatura = ($asignatura['estado_final'] === 'APROBADO') ? 'fas fa-check' : 'fas fa-times';
                                                                 ?>
@@ -257,7 +267,6 @@ try {
                                                                                 <i class="<?php echo $iconoAsignatura; ?> me-1"></i><?php echo htmlspecialchars($asignatura['estado_final']); ?>
                                                                             </span>
                                                                         </td>
-                                                                        
                                                                     </tr>
                                                                 <?php endforeach; ?>
                                                             </tbody>

@@ -29,7 +29,59 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"></script>
 <script src="../public/js/script.js"></script>
  
+ 
+
+
+
 <script>
+
+
+function mostrarToast(mensaje, tipo = 'success') {
+    const colores = {
+        success: 'bg-success text-white',
+        error: 'bg-danger text-white',
+        warning: 'bg-warning text-dark',
+        info: 'bg-info text-dark'
+    };
+
+    const iconos = {
+        success: '✔️',
+        error: '❌',
+        warning: '⚠️',
+        info: 'ℹ️'
+    };
+
+    const clase = colores[tipo] || colores.info;
+    const icono = iconos[tipo] || iconos.info;
+
+    const toastId = 'toast-' + Date.now();
+    const toastHTML = `
+      <div id="${toastId}" class="toast align-items-center ${clase} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="3000">
+        <div class="d-flex">
+          <div class="toast-body">
+            ${icono} ${mensaje}
+          </div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+        </div>
+      </div>
+    `;
+
+    const contenedor = document.getElementById('toast-container');
+    contenedor.insertAdjacentHTML('beforeend', toastHTML);
+
+    const toastElemento = document.getElementById(toastId);
+    const toastBootstrap = new bootstrap.Toast(toastElemento);
+    toastBootstrap.show();
+
+    toastElemento.addEventListener('hidden.bs.toast', () => {
+        toastElemento.remove();
+    });
+}
+
+
+
+
+
     // Tu script para el toggle del menú (si aplica)
     var el = document.getElementById("wrapper");
     var toggleButton = document.getElementById("menu-toggle");

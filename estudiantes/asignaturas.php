@@ -27,51 +27,86 @@ if (!$id_estudiante) {
     exit;
 }
 
-$stmt_inscripciones = $pdo->prepare("  
-   SELECT
+// --- CONSULTA SQL MODIFICADA ---
+$stmt_inscripciones = $pdo->prepare("
+SELECT
     ie.id AS id_inscripcion,
     ie.confirmada,
     ie.fecha_inscripcion,
+
+    -- Asignatura y créditos
     a.nombre_asignatura,
     a.creditos,
+
+    -- Curso desde grupos_asignaturas (o asignaturas, si es más directo)
+    -- Si el curso de la asignatura es siempre el mismo que el del grupo,
+    -- podrías obtenerlo directamente de `a.id_curso` y `JOIN cursos c ON a.id_curso = c.id`
+    -- Pero si el grupo puede tener un curso diferente, déjalo así.
     c.nombre_curso,
+    
+    -- Semestre
     s.numero_semestre,
     s.id AS id_semestre,
-    h.dia_semana,
-    h.hora_inicio,
-    h.hora_fin,
-    h.turno,
-    u_profesor.nombre_completo AS nombre_profesor,
-    au.nombre_aula,
-    h.id AS id_horario_elegido,
 
-    -- Datos del historial académico
-    ha.nota_final,
-    ha.estado_final
+    -- Profesor del grupo asignado
+    u.nombre_completo AS nombre_profesor,
+
+    -- Información de Grupo (Grupo y Turno)
+    ga.grupo,
+    ga.turno AS grupo_turno,
+
+    -- Horarios CONCATENADOS
+    GROUP_CONCAT(
+        DISTINCT CONCAT(
+            h.dia_semana, ' (', SUBSTRING(h.hora_inicio, 1, 5), '-', SUBSTRING(h.hora_fin, 1, 5), ') @ ', au.nombre_aula,
+            ' (Turno: ', h.turno, ')' -- Incluir el turno del horario si es diferente al del grupo
+        )
+        ORDER BY FIELD(h.dia_semana, 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'), h.hora_inicio
+        SEPARATOR '<br>' -- Usar <br> para saltos de línea en HTML
+    ) AS horarios_detallados,
+
+    -- Aulas (se concatenarán junto con los horarios)
+    -- Ya se incluyen en horarios_detallados, no necesitamos una columna separada aquí
+
+    -- Calificación final desde tabla notas
+    n.nota AS nota_final,
+    n.estado AS estado_final
 
 FROM inscripciones_estudiantes ie
+
+-- Asignatura
 INNER JOIN asignaturas a ON ie.id_asignatura = a.id
+
+-- Semestre
 INNER JOIN semestres s ON ie.id_semestre = s.id
-LEFT JOIN cursos c ON a.id_curso = c.id
-LEFT JOIN horarios h ON ie.id_horario = h.id
-LEFT JOIN profesores p ON h.id_profesor = p.id
-LEFT JOIN usuarios u_profesor ON p.id_usuario = u_profesor.id
+
+-- Grupo (para profesor, curso y turno)
+LEFT JOIN grupos_asignaturas ga ON ie.id_grupo_asignatura = ga.id
+LEFT JOIN cursos c ON ga.id_curso = c.id
+LEFT JOIN profesores p ON ga.id_profesor = p.id
+LEFT JOIN usuarios u ON p.id_usuario = u.id
+
+-- Horario (asociado al grupo)
+-- Importante: Esta unión *no* debería estar en LEFT JOIN si solo quieres horarios
+-- asociados a un grupo ya asignado a la inscripción.
+-- Pero para mostrar  si no hay grupo asignado, LEFT JOIN está bien.
+LEFT JOIN horarios h ON h.id_grupo_asignatura = ga.id AND h.id_semestre = ie.id_semestre
 LEFT JOIN aulas au ON h.id_aula = au.id
 
--- JOIN con historial académico
-LEFT JOIN historial_academico ha ON 
-    ha.id_estudiante = ie.id_estudiante AND 
-    ha.id_asignatura = ie.id_asignatura AND 
-    ha.id_semestre = ie.id_semestre
+-- Nota final
+LEFT JOIN notas n ON n.id_inscripcion = ie.id
 
 WHERE ie.id_estudiante = :id_estudiante
+
+GROUP BY ie.id -- *** ESTO ES CRUCIAL PARA EVITAR DUPLICADOS ***
 
 ORDER BY
     c.nombre_curso ASC,
     s.numero_semestre ASC,
     a.nombre_asignatura ASC
-
 ");
+
+
 $stmt_inscripciones->bindParam(':id_estudiante', $id_estudiante, PDO::PARAM_INT);
 $stmt_inscripciones->execute();
 $inscripciones = $stmt_inscripciones->fetchAll(PDO::FETCH_ASSOC);
@@ -84,7 +119,8 @@ $inscripciones = $stmt_inscripciones->fetchAll(PDO::FETCH_ASSOC);
 
     <?php if (!empty($mensajes_flash)): ?>
         <?php foreach ($mensajes_flash as $mensaje): ?>
-            <div class="alert alert-<?= htmlspecialchars($mensaje['type']) ?> alert-dismissible fade show shadow-sm" role="alert">
+            <div class="alert alert-<?= htmlspecialchars($mensaje['type']) ?> alert-dismissible fade show shadow-sm"
+                role="alert">
                 <?= htmlspecialchars($mensaje['message']) ?>
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
@@ -104,10 +140,8 @@ $inscripciones = $stmt_inscripciones->fetchAll(PDO::FETCH_ASSOC);
                         <th>Curso</th>
                         <th>Semestre</th>
                         <th>Inscripción</th>
-                        <th>Horario</th>
                         <th>Profesor</th>
-                        <th>Aula</th>
-                        <th>Calificación Final</th>
+                        <th>Grupo/Turno</th> <th>Horario y Aula</th> <th>Calificación Final</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -118,35 +152,43 @@ $inscripciones = $stmt_inscripciones->fetchAll(PDO::FETCH_ASSOC);
                                 <small class="text-muted"><?= $ins['creditos'] ?> créditos</small>
                             </td>
                             <td><?= htmlspecialchars($ins['nombre_curso'] ?? 'N/A') ?></td>
-                            <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($ins['numero_semestre']) ?>° Semestre</span></td>
+                            <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($ins['numero_semestre']) ?>°
+                                    Semestre</span></td>
                             <td>
-                                <span class="badge rounded-pill <?= $ins['confirmada'] ? 'bg-success' : 'bg-warning text-dark' ?>">
+                                <span
+                                    class="badge rounded-pill <?= $ins['confirmada'] ? 'bg-success' : 'bg-warning text-dark' ?>">
                                     <i class="fas <?= $ins['confirmada'] ? 'fa-check-circle' : 'fa-hourglass-half' ?>"></i>
                                     <?= $ins['confirmada'] ? 'Confirmada' : 'Pendiente' ?>
                                 </span>
                             </td>
                             <td>
-                                <?php if (!empty($ins['id_horario_elegido'])): ?>
-                                    <div class="small text-muted">
-                                        <i class="fas fa-calendar-day me-1"></i> <?= htmlspecialchars($ins['dia_semana']) ?><br>
-                                        <i class="fas fa-clock me-1"></i> <?= substr($ins['hora_inicio'], 0, 5) ?> - <?= substr($ins['hora_fin'], 0, 5) ?><br>
-                                        <span class="badge bg-secondary-subtle text-dark"><?= htmlspecialchars($ins['turno']) ?></span>
-                                    </div>
+                                <span
+                                    class="badge bg-info-subtle text-dark"><?= htmlspecialchars($ins['nombre_profesor'] ?? 'Sin asignar') ?></span>
+                            </td>
+                            <td>
+                                <?php if (!empty($ins['grupo'])): ?>
+                                    <span class="badge bg-primary-subtle text-dark">Grupo <?= htmlspecialchars($ins['grupo']) ?></span><br>
+                                    <small class="text-muted"><?= htmlspecialchars($ins['grupo_turno'] ?? '') ?></small>
                                 <?php else: ?>
-                                    <span class="text-muted">Sin horario</span>
+                                    <span class="text-muted">Sin grupo asignado</span>
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <span class="badge bg-info-subtle text-dark"><?= htmlspecialchars($ins['nombre_profesor'] ?? 'Sin asignar') ?></span>
-                            </td>
-                            <td>
-                                <span class="text-muted"><?= htmlspecialchars($ins['nombre_aula'] ?? 'Sin asignar') ?></span>
+                                <?php if (!empty($ins['horarios_detallados'])): ?>
+                                    <div class="small text-muted text-start">
+                                        <?= $ins['horarios_detallados'] ?>
+                                    </div>
+                                <?php else: ?>
+                                    <span class="text-muted">Sin horario asignado</span>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <?php if (!is_null($ins['nota_final'])): ?>
-                                    <span class="badge bg-<?= $ins['estado_final'] === 'APROBADO' ? 'success' : 'danger' ?> fw-semibold">
+                                    <span
+                                        class="badge bg-<?= $ins['estado_final'] === 'APROBADO' ? 'success' : 'danger' ?> fw-semibold">
                                         <i class="fas <?= $ins['estado_final'] === 'APROBADO' ? 'fa-check' : 'fa-times' ?>"></i>
-                                        <?= htmlspecialchars($ins['nota_final']) ?> <span class="ms-1">(<?= $ins['estado_final'] ?>)</span>
+                                        <?= htmlspecialchars($ins['nota_final']) ?> <span
+                                            class="ms-1">(<?= $ins['estado_final'] ?>)</span>
                                     </span>
                                 <?php else: ?>
                                     <span class="badge bg-secondary">Pendiente</span>
@@ -159,6 +201,5 @@ $inscripciones = $stmt_inscripciones->fetchAll(PDO::FETCH_ASSOC);
         </div>
     <?php endif; ?>
 </div>
-
 
 <?php include_once '../includes/footer.php'; ?>

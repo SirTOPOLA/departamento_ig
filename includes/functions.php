@@ -26,6 +26,23 @@ function redirect_to_dashboard($role) {
     exit(); // Es crucial llamar a exit() después de una redirección
 }
 
+
+
+function getHorarioPorGrupoYSemestre(PDO $pdo, int $id_grupo_asignatura, int $id_semestre): ?array {
+    $stmt = $pdo->prepare("
+        SELECT dia_semana, hora_inicio, hora_fin, turno
+        FROM horarios
+        WHERE id_grupo_asignatura = :grupo AND id_semestre = :semestre
+        LIMIT 1
+    ");
+    $stmt->execute([
+        ':grupo' => $id_grupo_asignatura,
+        ':semestre' => $id_semestre
+    ]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+
 /**
  * Verifica si el usuario está logueado y tiene el rol requerido.
  * Si no está logueado o no tiene el rol, redirige.

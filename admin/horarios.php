@@ -4,54 +4,93 @@ check_login_and_role('Administrador');
 
 require_once '../config/database.php';
 
- 
-// --- El resto del script que genera la página HTML (para la solicitud GET) ---
 $page_title = "Gestión de Horarios";
-include_once '../includes/header.php'; // Incluye el header DESPUÉS del procesamiento POST
+include_once '../includes/header.php';
 
-// Obtener mensajes flash para JavaScript (ahora sí se recuperarán de la sesión)
 $flash_messages = get_flash_messages();
 
-// --- Obtener datos para los selects del formulario y la tabla ---
-
-// Horarios para la tabla principal
+// -----------------------------
+// Obtener horarios con relaciones nuevas
+// -----------------------------
 $stmt_horarios = $pdo->query("
-    SELECT 
-        h.id, h.dia_semana, h.hora_inicio, h.hora_fin, h.turno,
-        s.numero_semestre, aa.nombre_anio,
-        a.nombre_asignatura, c.nombre_curso,
-        p.nombre_completo AS nombre_profesor, -- Mostramos el nombre del usuario, pero el ID es de la tabla profesores
-        au.nombre_aula, au.ubicacion,
-        h.id_semestre, h.id_asignatura, h.id_curso, h.id_profesor, h.id_aula
-    FROM horarios h
-    JOIN semestres s ON h.id_semestre = s.id
-    JOIN anios_academicos aa ON s.id_anio_academico = aa.id
-    JOIN asignaturas a ON h.id_asignatura = a.id
-    JOIN cursos c ON h.id_curso = c.id
-    JOIN profesores prof ON h.id_profesor = prof.id -- CAMBIO CLAVE: Unimos con la tabla 'profesores'
-    JOIN usuarios p ON prof.id_usuario = p.id -- CAMBIO CLAVE: Luego unimos 'profesores' con 'usuarios' para obtener el nombre
-    JOIN aulas au ON h.id_aula = au.id
-    ORDER BY h.dia_semana, h.hora_inicio ASC
+   SELECT 
+    h.id AS id_horario,
+    h.dia_semana,
+    h.hora_inicio,
+    h.hora_fin,
+    h.turno,
+    h.id_aula,
+    s.numero_semestre,
+    aa.nombre_anio,
+    a.nombre_asignatura,
+    c.nombre_curso,
+    u.nombre_completo AS nombre_profesor,
+    au.nombre_aula,
+    au.ubicacion,
+    h.id_semestre,
+    h.id_grupo_asignatura,
+    ga.id_asignatura,
+    ga.id_profesor,
+    ga.id_curso,
+    ga.grupo
+FROM horarios h
+JOIN grupos_asignaturas ga ON h.id_grupo_asignatura = ga.id
+JOIN asignaturas a ON ga.id_asignatura = a.id
+JOIN cursos c ON ga.id_curso = c.id
+JOIN profesores p ON ga.id_profesor = p.id
+JOIN usuarios u ON p.id_usuario = u.id
+JOIN aulas au ON h.id_aula = au.id
+JOIN semestres s ON h.id_semestre = s.id
+JOIN anios_academicos aa ON s.id_anio_academico = aa.id
+ORDER BY h.dia_semana, h.hora_inicio ASC
+
 ");
 $horarios = $stmt_horarios->fetchAll(PDO::FETCH_ASSOC);
 
-// Datos para los selects del modal
-$semestres_list = $pdo->query("SELECT s.id, s.numero_semestre, aa.nombre_anio FROM semestres s JOIN anios_academicos aa ON s.id_anio_academico = aa.id ORDER BY aa.nombre_anio DESC, s.numero_semestre ASC")->fetchAll(PDO::FETCH_ASSOC);
-$asignaturas_list = $pdo->query("SELECT id, nombre_asignatura, id_curso, semestre_recomendado FROM asignaturas ORDER BY nombre_asignatura ASC")->fetchAll(PDO::FETCH_ASSOC);
-$cursos_list = $pdo->query("SELECT id, nombre_curso FROM cursos ORDER BY nombre_curso ASC ")->fetchAll(PDO::FETCH_ASSOC);
-// CAMBIO CLAVE: Obtener profesores de la tabla 'profesores', uniendo con 'usuarios' para el nombre completo
-$stmt_profesores = $pdo->prepare("SELECT prof.id, u.nombre_completo FROM profesores prof JOIN usuarios u ON prof.id_usuario = u.id ORDER BY u.nombre_completo ASC");
+// -----------------------------
+// Datos para selects
+// -----------------------------
+$semestres_list = $pdo->query("
+    SELECT s.id, s.numero_semestre, aa.nombre_anio 
+    FROM semestres s 
+    JOIN anios_academicos aa ON s.id_anio_academico = aa.id 
+    ORDER BY aa.nombre_anio DESC, s.numero_semestre ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$asignaturas_list = $pdo->query("
+    SELECT id, nombre_asignatura, id_curso, semestre_recomendado 
+    FROM asignaturas 
+    ORDER BY nombre_asignatura ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$cursos_list = $pdo->query("
+    SELECT id, nombre_curso 
+    FROM cursos 
+    ORDER BY nombre_curso ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+// Profesores (desde tabla profesores + usuarios)
+$stmt_profesores = $pdo->prepare("
+    SELECT prof.id, u.nombre_completo 
+    FROM profesores prof 
+    JOIN usuarios u ON prof.id_usuario = u.id 
+    ORDER BY u.nombre_completo ASC
+");
 $stmt_profesores->execute();
 $profesores_list = $stmt_profesores->fetchAll(PDO::FETCH_ASSOC);
-$aulas_list = $pdo->query("SELECT id, nombre_aula, capacidad FROM aulas ORDER BY nombre_aula ASC")->fetchAll(PDO::FETCH_ASSOC);
 
-// Días de la semana para el select
+$aulas_list = $pdo->query("
+    SELECT id, nombre_aula, capacidad 
+    FROM aulas 
+    ORDER BY nombre_aula ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+// Días y turnos
 $dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-
-// Turnos
-$turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turno de mañana. Si no, ajústalo.
+$turnos = ['Tarde', 'Noche']; // Si tienes "Mañana", añádelo
 
 ?>
+
 
 <h1 class="mt-4">Gestión de Horarios</h1>
 <p class="lead">Programa las clases, asignando asignaturas, profesores, aulas y horarios.</p>
@@ -108,7 +147,7 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
                 <tbody>
                     <?php if (count($horarios) > 0): ?>
                         <?php foreach ($horarios as $horario): ?>
-                            <tr data-id="<?php echo htmlspecialchars($horario['id']); ?>"
+                            <tr data-id-horario="<?php echo htmlspecialchars($horario['id_horario']); ?>"
                                 data-id_semestre="<?php echo htmlspecialchars($horario['id_semestre']); ?>"
                                 data-id_asignatura="<?php echo htmlspecialchars($horario['id_asignatura']); ?>"
                                 data-id_curso="<?php echo htmlspecialchars($horario['id_curso']); ?>"
@@ -117,8 +156,9 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
                                 data-dia_semana="<?php echo htmlspecialchars($horario['dia_semana']); ?>"
                                 data-hora_inicio="<?php echo htmlspecialchars($horario['hora_inicio']); ?>"
                                 data-hora_fin="<?php echo htmlspecialchars($horario['hora_fin']); ?>"
-                                data-turno="<?php echo htmlspecialchars($horario['turno']); ?>">
-                                <td><?php echo htmlspecialchars($horario['id']); ?></td>
+                                data-turno="<?php echo htmlspecialchars($horario['turno']); ?>"
+                                data-grupo="<?php echo htmlspecialchars($horario['grupo']); ?>">
+                                <td><?php echo htmlspecialchars($horario['id_horario']); ?></td>
                                 <td><?php echo htmlspecialchars($horario['numero_semestre'] . ' (' . $horario['nombre_anio'] . ')'); ?>
                                 </td>
                                 <td><?php echo htmlspecialchars($horario['nombre_asignatura']); ?></td>
@@ -129,7 +169,7 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
                                 <td><?php echo htmlspecialchars($horario['dia_semana']); ?></td>
                                 <td><?php echo htmlspecialchars(substr($horario['hora_inicio'], 0, 5)); ?></td>
                                 <td><?php echo htmlspecialchars(substr($horario['hora_fin'], 0, 5)); ?></td>
-                                <td><?php echo htmlspecialchars($horario['turno']); ?></td>
+                                <td><?php echo htmlspecialchars($horario['turno']. ' (Grupo' . $horario['grupo'] . ')'); ?></td>
                                 <td>
                                     <button type="button" class="btn btn-warning btn-sm edit-btn me-1" title="Editar"
                                         data-bs-toggle="modal" data-bs-target="#horariosModal">
@@ -137,12 +177,13 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
                                     </button>
                                     <button type="button" class="btn btn-danger btn-sm delete-btn" title="Eliminar"
                                         data-bs-toggle="modal" data-bs-target="#confirmDeleteModal"
-                                        data-id-horario="<?php echo htmlspecialchars($horario['id']); ?>">
+                                        data-id-horario="<?php echo htmlspecialchars($horario['id_horario']); ?>">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
+
                     <?php else: ?>
                         <tr>
                             <td colspan="11" class="text-center">No hay horarios registrados.</td>
@@ -202,7 +243,7 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
                     <input type="hidden" name="id_horario" id="modal_id_horario">
                     <input type="hidden" name="action" id="modal_action" value="add">
                     <div class="row mb-3">
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <label for="modal_id_semestre" class="form-label">Semestre Académico <span
                                     class="text-danger">*</span></label>
                             <select class="form-select" id="modal_id_semestre" name="id_semestre" required>
@@ -214,7 +255,7 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label for="modal_id_curso" class="form-label">Curso <span
                                     class="text-danger">*</span></label>
                             <select class="form-select" id="modal_id_curso" name="id_curso" required>
@@ -225,6 +266,11 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="modal_id_curso" class="form-label">GRUPO <span
+                                    class="text-danger">*</span></label>
+                            <input type="number" name="grupo" class="form-intem" id="">
                         </div>
                     </div>
 
@@ -330,31 +376,31 @@ $turnos = ['Mañana', 'Tarde', 'Noche']; // Asumo que también puedes tener turn
 
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Obtenemos una referencia al modal de confirmación
-    const confirmDeleteModal = document.getElementById('confirmDeleteModal');
+    document.addEventListener('DOMContentLoaded', function () {
+        // Obtenemos una referencia al modal de confirmación
+        const confirmDeleteModal = document.getElementById('confirmDeleteModal');
 
-    // Verificamos que el modal exista antes de intentar añadir un listener
-    if (confirmDeleteModal) {
-        // Añadimos un listener para el evento 'show.bs.modal' de Bootstrap.
-        // Este evento se dispara justo antes de que el modal se muestre.
-        confirmDeleteModal.addEventListener('show.bs.modal', function (event) {
-            // 'event.relatedTarget' es el elemento HTML que activó el modal (en este caso, el botón de "Eliminar").
-            const button = event.relatedTarget;
+        // Verificamos que el modal exista antes de intentar añadir un listener
+        if (confirmDeleteModal) {
+            // Añadimos un listener para el evento 'show.bs.modal' de Bootstrap.
+            // Este evento se dispara justo antes de que el modal se muestre.
+            confirmDeleteModal.addEventListener('show.bs.modal', function (event) {
+                // 'event.relatedTarget' es el elemento HTML que activó el modal (en este caso, el botón de "Eliminar").
+                const button = event.relatedTarget;
 
-            // Extraemos el valor del atributo 'data-id-horario' del botón.
-            const idHorario = button.getAttribute('data-id-horario');
+                // Extraemos el valor del atributo 'data-id-horario' del botón.
+                const idHorario = button.getAttribute('data-id-horario');
 
-            // Obtenemos una referencia al input oculto dentro del formulario del modal.
-            const deleteHorarioIdInput = confirmDeleteModal.querySelector('#deleteHorarioId');
+                // Obtenemos una referencia al input oculto dentro del formulario del modal.
+                const deleteHorarioIdInput = confirmDeleteModal.querySelector('#deleteHorarioId');
 
-            // Asignamos el ID del horario al valor del input oculto.
-            if (deleteHorarioIdInput) {
-                deleteHorarioIdInput.value = idHorario;
-            }
-        });
-    }
-});
+                // Asignamos el ID del horario al valor del input oculto.
+                if (deleteHorarioIdInput) {
+                    deleteHorarioIdInput.value = idHorario;
+                }
+            });
+        }
+    });
 </script>
 <script>
     const flashMessages = <?php echo json_encode($flash_messages); ?>;
@@ -362,7 +408,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 
-      // --- Lógica del modal de edición/añadir (existente, se mantiene) ---
+    // --- Lógica del modal de edición/añadir (existente, se mantiene) ---
 
     // Cache elements for better performance
     const modalIdHorario = document.getElementById('modal_id_horario');
@@ -403,7 +449,7 @@ document.addEventListener('DOMContentLoaded', function() {
     flashMessages.forEach(msg => {
         showToast(msg.message, msg.type);
     });
-    
+
     // --- Funcionalidad para botón "Nuevo Horario" ---
     document.getElementById('addNewhorariosBtn').addEventListener('click', function () {
         document.getElementById('horariosForm').reset();

@@ -1,13 +1,13 @@
 <?php
 
 require_once '../includes/functions.php';
-// Ensure the logged-in user is a student
+// Asegura que el usuario logueado sea un Estudiante
 check_login_and_role('Estudiante');
 
 require_once '../config/database.php';
 
-// --- POST Processing Logic for Enrollment (MUST BE BEFORE ANY HTML OUTPUT) ---
-// Get the student's id_estudiante and the ID of the COURSE they are CURRENTLY IN for the CURRENT ACADEMIC YEAR
+// --- Lógica de Procesamiento POST para Inscripción (DEBE ESTAR ANTES DE CUALQUIER SALIDA HTML) ---
+// Obtener el id_estudiante del estudiante y el ID del CURSO en el que está ACTUALMENTE para el AÑO ACADÉMICO ACTUAL
 $stmt_student_details = $pdo->prepare("
     SELECT
         e.id AS id_estudiante,
@@ -24,9 +24,9 @@ $stmt_student_details = $pdo->prepare("
         semestres s ON aa.id = s.id_anio_academico AND s.id_curso_asociado_al_semestre = ce.id_curso
     WHERE
         e.id_usuario = :id_usuario
-        AND aa.nombre_anio = (SELECT nombre_anio FROM anios_academicos ORDER BY id DESC LIMIT 1) -- Assumes the latest year is the current one
+        AND aa.nombre_anio = (SELECT nombre_anio FROM anios_academicos ORDER BY id DESC LIMIT 1) -- Asume que el último año es el actual
         AND CURDATE() BETWEEN s.fecha_inicio AND s.fecha_fin
-    ORDER BY s.numero_semestre DESC -- In case multiple semesters are active for the same year/course (unlikely, but for robustness)
+    ORDER BY s.numero_semestre DESC -- En caso de que múltiples semestres estén activos para el mismo año/curso (improbable, pero para robustez)
     LIMIT 1
 ");
 $stmt_student_details->bindParam(':id_usuario', $_SESSION['user_id'], PDO::PARAM_INT);
@@ -35,19 +35,19 @@ $student_context = $stmt_student_details->fetch(PDO::FETCH_ASSOC);
 
 if (!$student_context) {
     set_flash_message('danger', 'Error: No se encontró el contexto académico actual para su perfil de estudiante. Contacte a la administración.');
-    header('Location: ../logout.php'); // Redirect to logout or an error page
+    header('Location: ../logout.php'); // Redirige a la página de cierre de sesión o a una página de error
     exit;
 }
 $id_estudiante_actual = $student_context['id_estudiante'];
-$id_curso_actual_estudiante = $student_context['id_curso_actual_estudiante']; // Student's CURRENT Course ID (e.g., 'primero')
-$id_semestre_actual_en_curso = $student_context['id_semestre_actual_estudiante_en_curso']; // ID of the current semester associated with student's current course
-$numero_semestre_actual_en_curso = $student_context['numero_semestre_actual_estudiante_en_curso']; // Number of the current semester (e.g., 1, 2)
+$id_curso_actual_estudiante = $student_context['id_curso_actual_estudiante']; // ID del Curso ACTUAL del estudiante (ej. 'primero')
+$id_semestre_actual_en_curso = $student_context['id_semestre_actual_estudiante_en_curso']; // ID del semestre actual asociado al curso actual del estudiante
+$numero_semestre_actual_en_curso = $student_context['numero_semestre_actual_estudiante_en_curso']; // Número del semestre actual (ej. 1, 2)
 
-// Get the actual current semester (this function should return the true current semester regardless of student's course)
-// This is for the overall enrollment period, not necessarily what the student is *expected* to be taking.
+// Obtener el semestre actual real (esta función debe devolver el semestre actual verdadero independientemente del curso del estudiante)
+// Esto es para el período de inscripción general, no necesariamente lo que se espera que el estudiante esté cursando.
 $current_semester = get_current_semester($pdo);
 
-// If the get_current_semester doesn't find one for the student's context, prioritize the student's actual current semester
+// Si get_current_semester no encuentra uno para el contexto del estudiante, priorizar el semestre actual real del estudiante
 if (!$current_semester && $id_semestre_actual_en_curso) {
     $stmt_specific_semester = $pdo->prepare("SELECT * FROM semestres WHERE id = :id_semestre");
     $stmt_specific_semester->bindParam(':id_semestre', $id_semestre_actual_en_curso, PDO::PARAM_INT);
@@ -55,65 +55,62 @@ if (!$current_semester && $id_semestre_actual_en_curso) {
     $current_semester = $stmt_specific_semester->fetch(PDO::FETCH_ASSOC);
 }
 
-// Check if a semester could be determined at all
+// Verificar si se pudo determinar un semestre
 if (!$current_semester) {
     set_flash_message('danger', 'Error: No se pudo determinar el semestre académico actual. Contacte a la administración.');
-    // header('Location: ../dashboard.php'); // Redirect to a safe page
+    // header('Location: ../dashboard.php'); // Redirige a una página segura
     // exit;
 }
 
 
-// --- Get data for the student view ---
-$page_title = "Inscripción Semestral"; // Adjusted title
-include_once '../includes/header.php'; // Include header here, after all POST logic and redirects
+// --- Obtener datos para la vista del estudiante ---
+$page_title = "Inscripción Semestral"; // Título ajustado
+include_once '../includes/header.php'; // Incluye el encabezado aquí, después de toda la lógica POST y las redirecciones
 
 $flash_messages = get_flash_messages();
 
 
-// Subjects the student is already enrolled in for the current semester (pending or confirmed)
+// Asignaturas en las que el estudiante ya está inscrito para el semestre actual (pendientes o confirmadas)
 $current_enrollments = [];
 if ($current_semester) {
     $stmt_current_enrollments = $pdo->prepare("
-      SELECT
-    ie.id_asignatura,
-    ie.id,
-    a.nombre_asignatura,
-    a.creditos,
-    ie.id_horario,
-    ie.id_semestre,
-    c.nombre_curso,
-    a.semestre_recomendado AS numero_semestre_asignatura,
-    s.numero_semestre AS semestre_actual_numero, 
-    s.id AS id_semestre,
-    aa.nombre_anio,
-    ie.confirmada,
-
-    -- Datos del horario
-    h.dia_semana,
-    h.hora_inicio,
-    h.hora_fin,
-    h.turno,
-    
-    -- Nombre del profesor
-    u.nombre_completo AS nombre_profesor
-
-FROM inscripciones_estudiantes ie
-JOIN asignaturas a ON ie.id_asignatura = a.id
-LEFT JOIN cursos c ON a.id_curso = c.id
-JOIN semestres s ON ie.id_semestre = s.id
-JOIN anios_academicos aa ON s.id_anio_academico = aa.id
-
--- Nuevas relaciones para obtener horario y profesor
-LEFT JOIN horarios h ON ie.id_horario = h.id
-LEFT JOIN profesores p ON h.id_profesor = p.id
-LEFT JOIN usuarios u ON p.id_usuario = u.id
-
-WHERE ie.id_estudiante = :id_estudiante
-  AND ie.id_semestre = :id_semestre_actual_inscripcion
-
-ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC;
-
+        SELECT
+            ie.id AS id_inscripcion,
+            ie.id_asignatura,
+            a.nombre_asignatura,
+            a.creditos,
+            ie.id_semestre,
+            s.numero_semestre AS semestre_actual_numero,
+            s.id AS id_semestre_id, -- Renombrado para evitar conflicto con `id_semestre` en ie.
+            aa.nombre_anio,
+            c.nombre_curso,
+            a.semestre_recomendado AS numero_semestre_asignatura,
+            ie.confirmada,
+            ga.id AS id_grupo_asignatura, -- Añadir esto
+            ga.grupo, -- Añadir esto
+            ga.turno AS grupo_turno, -- Añadir esto
+            u.nombre_completo AS nombre_profesor,
+            GROUP_CONCAT(
+                DISTINCT CONCAT(h.dia_semana, ' (', SUBSTRING(h.hora_inicio, 1, 5), '-', SUBSTRING(h.hora_fin, 1, 5), ') @ ', au.nombre_aula)
+                ORDER BY FIELD(h.dia_semana, 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'), h.hora_inicio
+                SEPARATOR '; '
+            ) AS horarios_info
+        FROM inscripciones_estudiantes ie
+        JOIN asignaturas a ON ie.id_asignatura = a.id
+        JOIN semestres s ON ie.id_semestre = s.id
+        JOIN anios_academicos aa ON s.id_anio_academico = aa.id
+        LEFT JOIN grupos_asignaturas ga ON ie.id_grupo_asignatura = ga.id
+        LEFT JOIN cursos c ON a.id_curso = c.id
+        LEFT JOIN profesores p ON ga.id_profesor = p.id
+        LEFT JOIN usuarios u ON p.id_usuario = u.id
+        LEFT JOIN horarios h ON h.id_grupo_asignatura = ga.id AND h.id_semestre = s.id
+        LEFT JOIN aulas au ON h.id_aula = au.id
+        WHERE ie.id_estudiante = :id_estudiante
+          AND ie.id_semestre = :id_semestre_actual_inscripcion
+        GROUP BY ie.id -- Agrupar por el ID de inscripción para evitar duplicación
+        ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC
     ");
+
     $stmt_current_enrollments->bindParam(':id_estudiante', $id_estudiante_actual, PDO::PARAM_INT);
     $stmt_current_enrollments->bindParam(':id_semestre_actual_inscripcion', $current_semester['id'], PDO::PARAM_INT);
     $stmt_current_enrollments->execute();
@@ -121,7 +118,7 @@ ORDER BY c.nombre_curso ASC, a.semestre_recomendado ASC, a.nombre_asignatura ASC
 }
 
 
-// Subjects approved by the student (for prerequisite verification)
+// Asignaturas aprobadas por el estudiante (para verificación de prerrequisitos)
 $approved_asignaturas_ids = [];
 $stmt_approved_asignaturas = $pdo->prepare("
     SELECT id_asignatura FROM historial_academico
@@ -131,17 +128,17 @@ $stmt_approved_asignaturas->bindParam(':id_estudiante', $id_estudiante_actual, P
 $stmt_approved_asignaturas->execute();
 $approved_asignaturas_ids = $stmt_approved_asignaturas->fetchAll(PDO::FETCH_COLUMN);
 
-// Subjects reprobated by the student (mandatory to retake)
+// Asignaturas reprobadas por el estudiante (obligatorias de retomar)
 $reproved_asignaturas = [];
 $reproved_asignaturas_ids = [];
-if ($current_semester) { // Only if there's an active semester for enrollment
+if ($current_semester) { // Solo si hay un semestre activo para la inscripción
     $stmt_reproved_asignaturas = $pdo->prepare("
         SELECT
             ha.id_asignatura AS id,
             a.nombre_asignatura,
             a.creditos,
             c.nombre_curso,
-             s.id AS id_semestre,
+            s.id AS id_semestre,
             a.semestre_recomendado AS numero_semestre_asignatura,
             s.numero_semestre AS semestre_historial_numero,
             aa.nombre_anio
@@ -166,11 +163,11 @@ if ($current_semester) { // Only if there's an active semester for enrollment
 }
 
 
-// Available subjects for enrollment for the student's current course and *previous semesters*
+// Asignaturas disponibles para inscripción para el curso actual del estudiante y *semestres anteriores*
 $available_asignaturas_for_modal = [];
 if ($current_semester) {
-    // We now fetch all potential subjects for the student's current course (from course_estudiante)
-    // up to their current semester in that course, excluding approved or currently enrolled ones.
+    // Ahora obtenemos todas las asignaturas potenciales para el curso actual del estudiante (de curso_estudiante)
+    // hasta su semestre actual en ese curso, excluyendo las aprobadas o las que ya están inscritas.
     $stmt_available_asignaturas = $pdo->prepare("
         SELECT
             a.id,
@@ -186,7 +183,7 @@ if ($current_semester) {
         JOIN cursos c ON a.id_curso = c.id
         WHERE
             a.id_curso = :id_curso_estudiante
-            AND a.semestre_recomendado <= :numero_semestre_actual_estudiante_en_curso -- Only show subjects up to the student's current recommended semester
+            AND a.semestre_recomendado <= :numero_semestre_actual_estudiante_en_curso -- Mostrar solo asignaturas hasta el semestre recomendado actual del estudiante
             AND a.id NOT IN (
                 SELECT id_asignatura FROM historial_academico WHERE id_estudiante = :id_estudiante_historial_aprobado AND estado_final = 'APROBADO'
             )
@@ -200,12 +197,12 @@ if ($current_semester) {
     $stmt_available_asignaturas->bindParam(':numero_semestre_actual_estudiante_en_curso', $numero_semestre_actual_en_curso, PDO::PARAM_INT);
     $stmt_available_asignaturas->bindParam(':id_estudiante_historial_aprobado', $id_estudiante_actual, PDO::PARAM_INT);
     $stmt_available_asignaturas->bindParam(':id_estudiante_enrolled', $id_estudiante_actual, PDO::PARAM_INT);
-    $stmt_available_asignaturas->bindParam(':id_semestre_enrolled', $current_semester['id'], PDO::PARAM_INT); // This is the ID of the actual registration semester
+    $stmt_available_asignaturas->bindParam(':id_semestre_enrolled', $current_semester['id'], PDO::PARAM_INT); // Este es el ID del semestre de inscripción real
 
     $stmt_available_asignaturas->execute();
     $available_asignaturas_for_modal = $stmt_available_asignaturas->fetchAll(PDO::FETCH_ASSOC);
 
-    // Merge reprobated subjects into the available list, ensuring they appear
+    // Fusionar asignaturas reprobadas en la lista de disponibles, asegurando que aparezcan
     foreach ($reproved_asignaturas as $reproved) {
         $found = false;
         foreach ($available_asignaturas_for_modal as $available) {
@@ -220,7 +217,6 @@ if ($current_semester) {
     }
 }
 ?>
-
 <h1 class="mt-4">Inscripción Semestral</h1>
 <p class="lead">Gestiona tu inscripción para el semestre actual y revisa tus asignaturas.</p>
 
@@ -285,22 +281,26 @@ if ($current_semester) {
                                             <?php if (empty($enrollment['id_horario'])): ?>
                                                 <button type="button" class="btn btn-sm btn-info select-horario-btn" data-bs-toggle="modal"
                                                     data-bs-target="#selectHorarioModal"
+                                                    data-inscripcion-id="<?= (int) ($enrollment['id_inscripcion'] ?? 0) ?>"
                                                     data-enrollment-id="<?= (int) ($enrollment['id'] ?? 0) ?>"
                                                     data-subject-id="<?= (int) ($enrollment['id_asignatura'] ?? 0) ?>"
-                                                    data-semestre-id="<?= (int) ($enrollment['id_semestre']  ?? 0) ?>"
+                                                    data-semestre-id="<?= (int) ($enrollment['id_semestre'] ?? 0) ?>"
                                                     id="select-btn-<?= (int) ($enrollment['id'] ?? 0) ?>">
                                                     <i class="fas fa-clock me-1"></i> Elegir Turno
                                                 </button>
-                                                <?php else: ?>
-                        <span class="text-muted" id="select-btn-<?= (int) ($enrollment['id'] ?? 0) ?>">Turno Asignado</span>
-                        <div id="horario-info-<?= (int) ($enrollment['id'] ?? 0) ?>" style="display:block;">
-                            <small class="text-muted">
-                                Profesor: <?= htmlspecialchars($enrollment['nombre_profesor'] ?? '-') ?><br>
-                                Turno: <?= htmlspecialchars($enrollment['turno'] ?? '-') ?> (<?= htmlspecialchars(substr($enrollment['hora_inicio'] ?? '', 0, 5)) ?> - <?= htmlspecialchars(substr($enrollment['hora_fin'] ?? '', 0, 5)) ?>)<br>
-                                Día: <?= htmlspecialchars($enrollment['dia_semana'] ?? '-') ?><br>
-                                Aula: <?= htmlspecialchars($enrollment['nombre_aula'] ?? '-') ?>
-                            </small>
-                        </div>
+                                            <?php else: ?>
+                                                <span class="text-muted" id="select-btn-<?= (int) ($enrollment['id'] ?? 0) ?>">Turno
+                                                    Asignado</span>
+                                                <div id="horario-info-<?= (int) ($enrollment['id'] ?? 0) ?>" style="display:block;">
+                                                    <small class="text-muted">
+                                                        Profesor: <?= htmlspecialchars($enrollment['nombre_profesor'] ?? '-') ?><br>
+                                                        Turno: <?= htmlspecialchars($enrollment['turno'] ?? '-') ?>
+                                                        (<?= htmlspecialchars(substr($enrollment['hora_inicio'] ?? '', 0, 5)) ?> -
+                                                        <?= htmlspecialchars(substr($enrollment['hora_fin'] ?? '', 0, 5)) ?>)<br>
+                                                        Día: <?= htmlspecialchars($enrollment['dia_semana'] ?? '-') ?><br>
+                                                        Aula: <?= htmlspecialchars($enrollment['nombre_aula'] ?? '-') ?>
+                                                    </small>
+                                                </div>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -364,7 +364,9 @@ if ($current_semester) {
     <?php endif; ?>
 
 <?php endif; ?>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+
+
 
 <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
 </div>
@@ -390,6 +392,10 @@ if ($current_semester) {
             </div>
         </div>
     </div>
+</div>
+<!-- Contenedor de Toasts -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 1055">
+    <div id="toast-container"></div>
 </div>
 
 <script>
@@ -417,85 +423,184 @@ if ($current_semester) {
         }
 
         // Cuando se hace clic en "Elegir Turno/Profesor"
+        // Cuando se hace clic en "Elegir Turno/Profesor"
         document.querySelectorAll('.select-horario-btn').forEach(boton => {
             boton.addEventListener('click', function () {
-                const idInscripcion = this.dataset.enrollmentId;
+                const idInscripcion = this.dataset.inscripcionId;
                 const idAsignatura = this.dataset.subjectId;
                 const idSemestre = this.dataset.semestreId;
-                    console.log('INSCR '+idInscripcion)
+
+                console.log('idInscripcion: '+idInscripcion)
                 // Guarda el ID de la inscripción en un campo oculto del modal
                 document.getElementById('modal-enrollment-id').value = idInscripcion;
 
-                // Limpia el contenido anterior y muestra mensaje de carga
-                const contenedorHorarios = document.getElementById('horarios-list-container');
-                contenedorHorarios.innerHTML = '<p class="text-muted text-center"><i class="fas fa-spinner fa-spin me-2"></i> Cargando horarios disponibles...</p>';
+                // Contenedor de grupos
+                const contenedorGrupos = document.getElementById('horarios-list-container');
+                contenedorGrupos.innerHTML = '<p class="text-muted text-center"><i class="fas fa-spinner fa-spin me-2"></i> Cargando grupos disponibles...</p>';
 
-                // Elimina cualquier alerta anterior del modal
-                const alertaExistente = contenedorHorarios.closest('.modal-body').querySelector('.alert');
-                if (alertaExistente) {
-                    alertaExistente.remove();
-                }
+                // Elimina alertas anteriores
+                const alertaAnterior = contenedorGrupos.closest('.modal-body').querySelector('.alert');
+                if (alertaAnterior) alertaAnterior.remove();
 
-                // --- INICIO: Uso de FormData ---
+                // Preparar datos POST
                 const formData = new FormData();
                 formData.append('id_asignatura', idAsignatura);
-                formData.append('id_semestre', idSemestre); 
+                formData.append('id_semestre', idSemestre);
 
-                // Solicita los horarios disponibles usando Fetch API (POST)
-                fetch('../api/obtener_horarios_profesores.php', {
+                // Fetch al nuevo endpoint
+                fetch('../api/obtener_grupos_por_asignatura.php', {
                     method: 'POST',
                     body: formData
                 })
-                    // --- FIN: Uso de FormData ---
                     .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`Error HTTP: ${response.status}`);
-                        }
+                        if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
                         return response.json();
                     })
                     .then(data => {
                         if (data.success) {
-                            if (data.horarios.length > 0) {
-                                // Construye la tabla de horarios
-                                let html = '<div class="table-responsive"><table class="table table-hover table-striped"><thead><tr><th>Profesor</th><th>Turno</th><th>Día</th><th>Aula</th><th>Acción</th></tr></thead><tbody>';
-                                data.horarios.forEach(horario => {
-                                    html += `
+                            if (data.grupos.length > 0) {
+                                // Construir tabla de grupos disponibles
+                                let html = `
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped">
+                                <thead>
                                     <tr>
-                                        <td>${horario.nombre_profesor}</td>
-                                        <td>${horario.turno} (${horario.hora_inicio.substring(0, 5)} - ${horario.hora_fin.substring(0, 5)})</td>
-                                        <td>${horario.dia_semana}</td>
-                                        <td>${horario.nombre_aula} (Cap.: ${horario.capacidad})</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-success choose-horario-btn" data-horario-id="${horario.id}"
-                                                    data-nombre-profesor="${horario.nombre_completo}"
-                                                    data-turno="${horario.turno}"
-                                                    data-hora-inicio="${horario.hora_inicio}"
-                                                    data-hora-fin="${horario.hora_fin}"
-                                                    data-dia-semana="${horario.dia_semana}"
-                                                    data-nombre-aula="${horario.nombre_aula}">
-                                                <i class="fas fa-check-circle me-1"></i> Elegir
-                                            </button>
-                                        </td>
+                                        <th>Profesor</th>
+                                        <th>Turno</th>
+                                        <th>Aula</th>
+                                        <th>Capacidad</th>
+                                        <th>Inscritos</th>
+                                        <th>Acción</th>
                                     </tr>
-                                `;
+                                </thead>
+                                <tbody>
+                    `;
+
+                                data.grupos.forEach(grupo => {
+                                    html += `
+                            <tr>
+                                <td>${grupo.nombre_profesor}</td>
+                                <td>${grupo.turno}</td>
+                                <td>${grupo.nombre_aula}</td>
+                                <td>${grupo.capacidad}</td>
+                                <td>${grupo.inscritos}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-success choose-grupo-btn"
+                                            data-grupo-id="${grupo.id_grupo}"
+                                            data-profesor="${grupo.nombre_profesor}"
+                                            data-turno="${grupo.turno}"
+                                            data-aula="${grupo.nombre_aula}">
+                                        <i class="fas fa-check-circle me-1"></i> Elegir
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
                                 });
+
                                 html += '</tbody></table></div>';
-                                contenedorHorarios.innerHTML = html;
+                                contenedorGrupos.innerHTML = html;
+
+                                // Aquí puedes agregar evento .choose-grupo-btn si deseas procesar selección
                             } else {
-                                // Si no hay horarios disponibles
-                                contenedorHorarios.innerHTML = '<div class="alert alert-info text-center" role="alert">No hay turnos/profesores disponibles para esta asignatura en este semestre.</div>';
+                                contenedorGrupos.innerHTML = `
+                        <div class="alert alert-info text-center" role="alert">
+                            No hay grupos disponibles para esta asignatura.
+                        </div>`;
                             }
                         } else {
-                            // Error del servidor
-                            contenedorHorarios.innerHTML = `<div class="alert alert-danger text-center" role="alert">Error al cargar horarios: ${data.message}</div>`;
+                            contenedorGrupos.innerHTML = `
+                    <div class="alert alert-danger text-center" role="alert">
+                        Error al cargar los grupos: ${data.message}
+                    </div>`;
                         }
                     })
                     .catch(error => {
                         console.error("Error en Fetch:", error);
-                        contenedorHorarios.innerHTML = '<div class="alert alert-danger text-center" role="alert">Error de conexión al cargar horarios. Por favor, intente de nuevo.</div>';
+                        contenedorGrupos.innerHTML = `
+                <div class="alert alert-danger text-center" role="alert">
+                    Error de conexión al cargar grupos. Intente de nuevo.
+                </div>`;
                     });
             });
         });
+
+
+        // Delegar evento porque los botones se cargan dinámicamente
+        document.addEventListener('click', function (e) {
+            if (e.target.classList.contains('choose-grupo-btn')) {
+                const boton = e.target;
+                const grupoId = boton.dataset.grupoId;
+                const idInscripcion = document.getElementById('modal-enrollment-id').value;
+
+                if (!idInscripcion || !grupoId) {
+                    alert('Faltan datos para asignar el grupo.');
+                    return;
+                }
+
+                boton.disabled = true;
+                boton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Asignando...';
+
+                const formData = new FormData();
+                formData.append('id_inscripcion', idInscripcion);
+                formData.append('id_grupo', grupoId);
+
+                console.log('idgrupo: '+grupoId)
+                console.log('idInscripcion: '+idInscripcion)
+
+                fetch('../api/asignar_grupo_a_inscripcion.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            boton.innerHTML = '<i class="fas fa-check-circle me-1"></i> Asignado';
+                            boton.classList.remove('btn-success');
+                            boton.classList.add('btn-secondary');
+                            boton.disabled = true;
+
+                            mostrarToast('Grupo asignado correctamente.', 'success');
+
+                            setTimeout(() => {
+                                const modal = bootstrap.Modal.getInstance(document.getElementById('modal-horarios'));
+                                modal.hide();
+                                location.reload();
+                            }, 1500);
+
+                        } else {
+                            mostrarToast(data.message || 'No se pudo asignar el grupo.', 'error');
+
+                            boton.innerHTML = '<i class="fas fa-times-circle me-1"></i> Error';
+                            boton.classList.remove('btn-success');
+                            boton.classList.add('btn-danger');
+                            setTimeout(() => {
+                                boton.innerHTML = '<i class="fas fa-check-circle me-1"></i> Elegir';
+                                boton.classList.remove('btn-danger');
+                                boton.classList.add('btn-success');
+                                boton.disabled = false;
+                            }, 2000);
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error:', err);
+                        mostrarToast('Error de red. Verifica tu conexión o intenta más tarde.', 'error');
+
+                        boton.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Fallo';
+                        boton.classList.add('btn-danger');
+                        setTimeout(() => {
+                            boton.innerHTML = '<i class="fas fa-check-circle me-1"></i> Elegir';
+                            boton.classList.remove('btn-danger');
+                            boton.classList.add('btn-success');
+                            boton.disabled = false;
+                        }, 2000);
+                    });
+
+            }
+        });
+
+
+
+
 
         // Delegación de evento: cuando se hace clic en "Elegir" dentro del modal
         document.getElementById('horarios-list-container').addEventListener('click', function (event) {
@@ -506,9 +611,9 @@ if ($current_semester) {
                 const botonElegir = event.target.closest('.choose-horario-btn');
                 const idHorario = botonElegir.dataset.horarioId;
                 const idInscripcion = document.getElementById('modal-enrollment-id').value;
-                
-                console.log('idHorario: '+idHorario)
-                console.log('idInscripcion: '+idInscripcion)
+
+                console.log('idHorario: ' + idHorario)
+                console.log('idInscripcion: ' + idInscripcion)
                 // Detalles para actualizar la UI
                 const nombreProfesor = botonElegir.dataset.nombreProfesor;
                 const turno = botonElegir.dataset.turno;

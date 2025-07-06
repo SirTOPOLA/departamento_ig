@@ -44,7 +44,8 @@ require_once '../config/database.php'; // Conexión PDO
  * @param int $id_anio_academico_actual El ID del año académico actual.
  * @return array Un array con 'exito' (bool) y 'mensaje' (string).
  */
-function confirmar_inscripcion_individual_logica(PDO $pdo, $id_inscripcion, $id_semestre_actual, $id_anio_academico_actual) {
+function confirmar_inscripcion_individual_logica(PDO $pdo, $id_inscripcion, $id_semestre_actual, $id_anio_academico_actual)
+{
     // 1. Obtener el ID del estudiante y el ID de la asignatura para la inscripción
     $stmt_obtener_detalles_inscripcion = $pdo->prepare("SELECT id_estudiante, id_asignatura FROM inscripciones_estudiantes WHERE id = :id_inscripcion AND id_semestre = :id_semestre");
     $stmt_obtener_detalles_inscripcion->bindParam(':id_inscripcion', $id_inscripcion, PDO::PARAM_INT);
@@ -139,15 +140,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 set_flash_message('danger', 'Error: ID de inscripción no válido para rechazar.');
             } else {
                 $stmt_rechazar = $pdo->prepare("DELETE FROM inscripciones_estudiantes WHERE id = :id_inscripcion AND id_semestre = :id_semestre");
-                if ($stmt_rechazar === false) { 
-                    error_log("Prepare error (reject_single_enrollment): " . json_encode($pdo->errorInfo())); 
-                    throw new PDOException("Error al preparar la consulta de rechazo."); 
+                if ($stmt_rechazar === false) {
+                    error_log("Prepare error (reject_single_enrollment): " . json_encode($pdo->errorInfo()));
+                    throw new PDOException("Error al preparar la consulta de rechazo.");
                 }
                 $stmt_rechazar->bindParam(':id_inscripcion', $id_inscripcion, PDO::PARAM_INT);
                 $stmt_rechazar->bindParam(':id_semestre', $id_semestre_actual, PDO::PARAM_INT);
-                if (!$stmt_rechazar->execute()) { 
-                    error_log("Execute error (reject_single_enrollment): " . json_encode($stmt_rechazar->errorInfo())); 
-                    throw new PDOException("Error al ejecutar la consulta de rechazo."); 
+                if (!$stmt_rechazar->execute()) {
+                    error_log("Execute error (reject_single_enrollment): " . json_encode($stmt_rechazar->errorInfo()));
+                    throw new PDOException("Error al ejecutar la consulta de rechazo.");
                 }
 
                 if ($stmt_rechazar->rowCount() > 0) {
@@ -366,7 +367,9 @@ if ($stmt_todos_estudiantes === false) {
 
 <ul class="nav nav-tabs mb-4" id="studentTabs" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="pending-enrollments-tab" data-bs-toggle="tab" data-bs-target="#pendingEnrollments" type="button" role="tab" aria-controls="pendingEnrollments" aria-selected="true">
+        <button class="nav-link active" id="pending-enrollments-tab" data-bs-toggle="tab"
+            data-bs-target="#pendingEnrollments" type="button" role="tab" aria-controls="pendingEnrollments"
+            aria-selected="true">
             <i class="fas fa-clipboard-list me-2"></i> Inscripciones Pendientes
             <?php if (count($estudiantes_con_inscripciones_pendientes) > 0): ?>
                 <span class="badge bg-danger ms-2"><?php echo count($estudiantes_con_inscripciones_pendientes); ?></span>
@@ -374,22 +377,26 @@ if ($stmt_todos_estudiantes === false) {
         </button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link" id="all-students-tab" data-bs-toggle="tab" data-bs-target="#allStudents" type="button" role="tab" aria-controls="allStudents" aria-selected="false">
+        <button class="nav-link" id="all-students-tab" data-bs-toggle="tab" data-bs-target="#allStudents" type="button"
+            role="tab" aria-controls="allStudents" aria-selected="false">
             <i class="fas fa-users me-2"></i> Todos los Estudiantes Activos
         </button>
     </li>
 </ul>
 
 <div class="tab-content" id="studentTabsContent">
-    <div class="tab-pane fade show active" id="pendingEnrollments" role="tabpanel" aria-labelledby="pending-enrollments-tab">
+    <div class="tab-pane fade show active" id="pendingEnrollments" role="tabpanel"
+        aria-labelledby="pending-enrollments-tab">
         <div class="d-flex justify-content-between mb-3 align-items-center">
-            <div id="pendingEnrollmentButtons" style="display: <?php echo (count($estudiantes_con_inscripciones_pendientes) > 0 && $semestre_actual) ? 'block' : 'none'; ?>;">
+            <div id="pendingEnrollmentButtons"
+                style="display: <?php echo (count($estudiantes_con_inscripciones_pendientes) > 0 && $semestre_actual) ? 'block' : 'none'; ?>;">
                 <button type="button" class="btn btn-success" id="confirmAllEnrollmentsBtn">
                     <i class="fas fa-check-double me-2"></i> Confirmar Todas las Inscripciones Pendientes
                 </button>
             </div>
             <div class="col-md-4">
-                <input type="search" class="form-control" id="searchInputPending" placeholder="Buscar estudiante en pendientes...">
+                <input type="search" class="form-control" id="searchInputPending"
+                    placeholder="Buscar estudiante en pendientes...">
             </div>
         </div>
 
@@ -420,8 +427,8 @@ if ($stmt_todos_estudiantes === false) {
                                         <td><?php echo htmlspecialchars($estudiante['telefono'] ?? 'N/A'); ?></td>
                                         <td class="text-center">
                                             <button type="button" class="btn btn-info btn-sm view-enrollments-btn"
-                                                     data-bs-toggle="modal" data-bs-target="#enrollmentDetailModal"
-                                                     title="Ver y Gestionar Inscripciones">
+                                                data-bs-toggle="modal" data-bs-target="#enrollmentDetailModal"
+                                                title="Ver y Gestionar Inscripciones">
                                                 <i class="fas fa-eye me-1"></i> Gestionar Inscripciones
                                             </button>
                                         </td>
@@ -436,7 +443,8 @@ if ($stmt_todos_estudiantes === false) {
                     </nav>
                 <?php else: ?>
                     <div class="alert alert-success mb-0">
-                        <i class="fas fa-check-circle me-1"></i> No hay estudiantes con solicitudes de inscripción pendientes para el semestre actual.
+                        <i class="fas fa-check-circle me-1"></i> No hay estudiantes con solicitudes de inscripción
+                        pendientes para el semestre actual.
                     </div>
                 <?php endif; ?>
             </div>
@@ -446,7 +454,8 @@ if ($stmt_todos_estudiantes === false) {
     <div class="tab-pane fade" id="allStudents" role="tabpanel" aria-labelledby="all-students-tab">
         <div class="d-flex justify-content-end mb-3 align-items-center">
             <div class="col-md-4">
-                <input type="search" class="form-control" id="searchInputAll" placeholder="Buscar en todos los estudiantes...">
+                <input type="search" class="form-control" id="searchInputAll"
+                    placeholder="Buscar en todos los estudiantes...">
             </div>
         </div>
 
@@ -479,8 +488,8 @@ if ($stmt_todos_estudiantes === false) {
                                         <td><?php echo htmlspecialchars($estudiante['curso_actual'] ?? 'N/A'); ?></td>
                                         <td class="text-center">
                                             <button type="button" class="btn btn-primary btn-sm view-history-btn"
-                                                     data-bs-toggle="modal" data-bs-target="#academicHistoryModal"
-                                                     title="Ver Historial Académico">
+                                                data-bs-toggle="modal" data-bs-target="#academicHistoryModal"
+                                                title="Ver Historial Académico">
                                                 <i class="fas fa-history me-1"></i> Ver Historial
                                             </button>
                                         </td>
@@ -503,12 +512,15 @@ if ($stmt_todos_estudiantes === false) {
     </div>
 </div>
 
-<div class="modal fade" id="enrollmentDetailModal" tabindex="-1" aria-labelledby="enrollmentDetailModalLabel" aria-hidden="true">
+<div class="modal fade" id="enrollmentDetailModal" tabindex="-1" aria-labelledby="enrollmentDetailModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="enrollmentDetailModalLabel">Inscripciones Pendientes de: <span id="modalStudentName"></span></h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <h5 class="modal-title" id="enrollmentDetailModalLabel">Inscripciones Pendientes de: <span
+                        id="modalStudentName"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="modalStudentUserId">
@@ -520,12 +532,15 @@ if ($stmt_todos_estudiantes === false) {
                 </div>
             </div>
             <div class="modal-footer d-flex justify-content-between">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i> Cerrar</button>
-                <form action="estudiantes.php" method="POST" class="d-inline-block" id="confirmAllStudentEnrollmentsForm">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i
+                        class="fas fa-times me-2"></i> Cerrar</button>
+                <form action="estudiantes.php" method="POST" class="d-inline-block"
+                    id="confirmAllStudentEnrollmentsForm">
                     <input type="hidden" name="action" value="confirm_student_enrollments">
                     <input type="hidden" name="id_estudiante" id="confirmAllStudentId">
-                    <button type="submit" class="btn btn-success" id="confirmAllStudentEnrollmentsBtn" style="display: none;"
-                            onclick="return confirm('¿Estás seguro de que quieres CONFIRMAR TODAS las asignaturas pendientes para este estudiante?');">
+                    <button type="submit" class="btn btn-success" id="confirmAllStudentEnrollmentsBtn"
+                        style="display: none;"
+                        onclick="return confirm('¿Estás seguro de que quieres CONFIRMAR TODAS las asignaturas pendientes para este estudiante?');">
                         <i class="fas fa-check-double me-2"></i> Confirmar Todas las Asignaturas
                     </button>
                 </form>
@@ -534,12 +549,15 @@ if ($stmt_todos_estudiantes === false) {
     </div>
 </div>
 
-<div class="modal fade" id="academicHistoryModal" tabindex="-1" aria-labelledby="academicHistoryModalLabel" aria-hidden="true">
+<div class="modal fade" id="academicHistoryModal" tabindex="-1" aria-labelledby="academicHistoryModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-secondary text-white">
-                <h5 class="modal-title" id="academicHistoryModalLabel">Historial Académico de: <span id="modalHistoryStudentName"></span></h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <h5 class="modal-title" id="academicHistoryModalLabel">Historial Académico de: <span
+                        id="modalHistoryStudentName"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="modalHistoryStudentUserId">
@@ -551,7 +569,8 @@ if ($stmt_todos_estudiantes === false) {
                 </div>
             </div>
             <div class="modal-footer d-flex justify-content-between">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i> Cerrar</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i
+                        class="fas fa-times me-2"></i> Cerrar</button>
                 <a href="#" id="printHistoryPdfBtn" class="btn btn-danger" target="_blank" style="display: none;">
                     <i class="fas fa-file-pdf me-2"></i> Imprimir en PDF
                 </a>
@@ -595,7 +614,7 @@ if ($stmt_todos_estudiantes === false) {
 
 
     // --- Funcionalidad para el botón "Confirmar Todas las Inscripciones Pendientes" (Global) ---
-    document.getElementById('confirmAllEnrollmentsBtn')?.addEventListener('click', function() {
+    document.getElementById('confirmAllEnrollmentsBtn')?.addEventListener('click', function () {
         if (confirm('¿Estás absolutamente seguro de que quieres CONFIRMAR TODAS las solicitudes de inscripción pendientes de TODOS los estudiantes? Esto solo confirmará las asignaturas para estudiantes que estén matriculados en el curso correspondiente. Esta acción no se puede deshacer.')) {
             const form = document.createElement('form');
             form.method = 'POST';
@@ -612,7 +631,7 @@ if ($stmt_todos_estudiantes === false) {
 
     // --- Funcionalidad para botones "Gestionar Inscripciones" por estudiante (en pestaña de pendientes) ---
     document.querySelectorAll('.view-enrollments-btn').forEach(button => {
-        button.addEventListener('click', function() {
+        button.addEventListener('click', function () {
             const filaTabla = this.closest('tr'); // Obtener la fila <tr>
 
             let idUsuarioEstudiante = null;
@@ -704,7 +723,7 @@ if ($stmt_todos_estudiantes === false) {
 
     // --- Funcionalidad para botones "Ver Historial" por estudiante (en pestaña de todos los estudiantes) ---
     document.querySelectorAll('.view-history-btn').forEach(button => {
-        button.addEventListener('click', function() {
+        button.addEventListener('click', function () {
             const filaTabla = this.closest('tr'); // Obtener la fila <tr>
 
             let idUsuarioEstudiante = null;
@@ -722,7 +741,7 @@ if ($stmt_todos_estudiantes === false) {
             modalHistoryStudentName.innerText = nombreEstudiante;
             modalHistoryStudentUserId.value = idUsuarioEstudiante;
             // Asegúrate de que generate_history_pdf.php espere 'id_usuario'
-            printHistoryPdfBtn.href = `generate_history_pdf.php?id_usuario=${idUsuarioEstudiante}`; // Set PDF link
+            printHistoryPdfBtn.href = `../libreria/generar_pdf_historial.php?id_usuario=${idUsuarioEstudiante}`; // Set PDF link
 
             academicHistoryContent.innerHTML = ''; // Limpiar contenido anterior
             loadingHistory.style.display = 'block'; // Mostrar mensaje de carga
@@ -751,7 +770,7 @@ if ($stmt_todos_estudiantes === false) {
                                 <tr>
                                     <td>${item.nombre_asignatura}</td>
                                     <td class="text-center">${item.numero_semestre}</td>
-                                    <td>${item.nombre_anio}</td>
+                                    <td>${item.anio_academico}</td>
                                     <td class="text-center">${item.nota_final}</td>
                                     <td class="text-center"><span class="badge bg-${item.estado_final === 'APROBADO' ? 'success' : 'danger'}">${item.estado_final}</span></td>
                                 </tr>
@@ -795,7 +814,7 @@ if ($stmt_todos_estudiantes === false) {
             });
 
             const totalPaginas = Math.ceil(filasFiltradas.length / filasPorPagina);
-            
+
             // Actualizar visibilidad del botón "Confirmar Todas las Inscripciones"
             if (idTabla === 'studentsTablePending') {
                 const botonesInscripcionesPendientes = document.getElementById('pendingEnrollmentButtons');
@@ -823,7 +842,7 @@ if ($stmt_todos_estudiantes === false) {
                 // En este escenario, si aún hay elementos filtrados pero no en la página actual,
                 // intenta ir a la primera página.
                 paginaActual = 1;
-                renderizarTabla(); 
+                renderizarTabla();
                 return;
             } else if (filasPaginadas.length === 0 && filasFiltradas.length === 0 && filtro !== '') {
                 // No hay resultados para la búsqueda actual, mostrar mensaje
@@ -833,7 +852,7 @@ if ($stmt_todos_estudiantes === false) {
                 // El mensaje de "No hay estudiantes..." ya debería ser manejado por PHP
                 return;
             }
-            
+
             filasPaginadas.forEach(fila => tbody.appendChild(fila));
             renderizarPaginacion(totalPaginas, contenedorPaginacion);
         }
