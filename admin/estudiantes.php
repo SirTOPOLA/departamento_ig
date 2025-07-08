@@ -1,12 +1,11 @@
 <?php
- require_once '../includes/functions.php';
+require_once '../includes/functions.php';
 // Asegura que solo un administrador pueda acceder a esta página.
 check_login_and_role('Administrador');
 
 require_once '../config/database.php'; // Conexión PDO
- 
 
- 
+
 // --- El resto del script que genera la página HTML (para la solicitud GET) ---
 $titulo_pagina = "Gestión de Estudiantes e Inscripciones";
 include_once '../includes/header.php';
@@ -108,7 +107,7 @@ if ($stmt_todos_estudiantes === false) {
 // Datos para los SELECTs en el modal de gestión de historial
 $asignaturas = $pdo->query("SELECT id, nombre_asignatura, semestre_recomendado FROM asignaturas ORDER BY nombre_asignatura")->fetchAll(PDO::FETCH_ASSOC);
 $semestres_disponibles = $pdo->query("
-    SELECT s.id, s.numero_semestre, aa.nombre_anio
+    SELECT s.id, s.numero_semestre, aa.nombre_anio, s.id_anio_academico
     FROM semestres s
     JOIN anios_academicos aa ON s.id_anio_academico = aa.id
     ORDER BY aa.nombre_anio DESC, s.numero_semestre DESC
@@ -352,7 +351,8 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
 </div>
 
 <div class="modal fade" id="manageAcademicHistoryModal" tabindex="-1" aria-labelledby="manageAcademicHistoryModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable"> <div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
             <form id="academicHistoryForm" action="../api/guardar_historial_anterior.php" method="POST">
                 <div class="modal-header bg-warning text-dark">
                     <h5 class="modal-title" id="manageAcademicHistoryModalLabel">Gestionar Historial Académico de: <span id="manageHistoryStudentName"></span></h5>
@@ -360,7 +360,8 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="action" value="guardar_historial_multiple">
-                    <input type="hidden" name="id_estudiante_db" id="manageHistoryStudentDbId"> <div class="row mb-3">
+                    <input type="hidden" name="id_estudiante_db" id="manageHistoryStudentDbId">
+                    <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="historyAnioSelect" class="form-label">Año Académico:</label>
                             <select class="form-select" id="historyAnioSelect" name="id_anio_academico" required>
@@ -376,7 +377,7 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
                             <label for="historySemestreSelect" class="form-label">Semestre:</label>
                             <select class="form-select" id="historySemestreSelect" name="id_semestre" required disabled>
                                 <option value="">Seleccione un semestre</option>
-                                </select>
+                            </select>
                         </div>
                     </div>
 
@@ -385,13 +386,13 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
                     <div id="asignaturasContainer" class="p-3 border rounded bg-light" style="min-height: 150px;">
                         <p class="text-center text-muted" id="initialPrompt">Por favor, seleccione un Año y un Semestre para cargar las asignaturas.</p>
                         <p class="text-center text-danger" id="noAsignaturasMessage" style="display: none;">No se encontraron asignaturas para el semestre/curso seleccionado.</p>
-                        </div>
+                    </div>
 
                     <div class="alert alert-info mt-3" id="editDeleteHistoryMessage" style="display: none;">
                         Nota: Las asignaturas ya registradas para este estudiante en este semestre mostrarán sus datos y pueden ser actualizadas.
                     </div>
 
-                    </div>
+                </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                         <i class="fas fa-times me-2"></i> Cerrar
@@ -399,7 +400,7 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
                     <button type="submit" class="btn btn-primary" id="saveHistoryEntryBtn">
                         <i class="fas fa-save me-2"></i> Guardar Historial del Semestre
                     </button>
-                    </div>
+                </div>
             </form>
         </div>
     </div>
@@ -415,14 +416,14 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
         // --- Funciones de Paginación y Búsqueda ---
         function paginarTabla(idTabla, idPaginacion, elementosPorPagina) {
             const tabla = document.getElementById(idTabla);
-            if (!tabla) return;
+            if (!tabla) return; // Salir si la tabla no existe
 
             const cuerpoTabla = tabla.querySelector('tbody');
             const filas = Array.from(cuerpoTabla.rows);
             const totalPaginas = Math.ceil(filas.length / elementosPorPagina);
             const contenedorPaginacion = document.getElementById(idPaginacion);
 
-            if (!contenedorPaginacion) return;
+            if (!contenedorPaginacion) return; // Salir si el contenedor de paginación no existe
 
             function mostrarPagina(pagina) {
                 filas.forEach((fila, indice) => {
@@ -459,25 +460,31 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
         }
 
         function configurarBusqueda(idInput, idTabla, idPagina, elementosPorPagina) {
-            document.getElementById(idInput)?.addEventListener('keyup', function() {
-                const textoBusqueda = this.value.toLowerCase();
-                const tabla = document.getElementById(idTabla);
-                if (!tabla) return;
+            const searchInput = document.getElementById(idInput); // Captura el elemento
+            if (searchInput) { // <-- ¡Verifica que el input de búsqueda existe!
+                searchInput.addEventListener('keyup', function() {
+                    const textoBusqueda = this.value.toLowerCase();
+                    const tabla = document.getElementById(idTabla);
+                    if (!tabla) return;
 
-                const cuerpoTabla = tabla.querySelector('tbody');
-                const filas = Array.from(cuerpoTabla.rows);
+                    const cuerpoTabla = tabla.querySelector('tbody');
+                    const filas = Array.from(cuerpoTabla.rows);
 
-                filas.forEach(fila => {
-                    const textoFila = fila.textContent.toLowerCase();
-                    fila.style.display = textoFila.includes(textoBusqueda) ? '' : 'none';
+                    filas.forEach(fila => {
+                        const textoFila = fila.textContent.toLowerCase();
+                        fila.style.display = textoFila.includes(textoBusqueda) ? '' : 'none';
+                    });
+
+                    if (textoBusqueda === '') {
+                        paginarTabla(idTabla, idPagina, elementosPorPagina);
+                    } else {
+                        const paginacionElement = document.getElementById(idPagina);
+                        if (paginacionElement) { // <-- ¡Verifica que el contenedor de paginación existe!
+                            paginacionElement.innerHTML = '';
+                        }
+                    }
                 });
-
-                if (textoBusqueda === '') {
-                    paginarTabla(idTabla, idPagina, elementosPorPagina);
-                } else {
-                    document.getElementById(idPagina).innerHTML = '';
-                }
-            });
+            }
         }
 
         // Inicializar paginación y búsqueda al cargar la página
@@ -491,9 +498,9 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
         if (mensajesFlash && mensajesFlash.length > 0) {
             mensajesFlash.forEach(mensaje => {
                 const divAlerta = `<div class="alert alert-${mensaje.type} alert-dismissible fade show mt-3" role="alert">
-                                ${mensaje.message}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                              </div>`;
+                                    ${mensaje.message}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                  </div>`;
                 document.getElementById('mainContent')?.insertAdjacentHTML('afterbegin', divAlerta);
             });
         }
@@ -501,17 +508,20 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
         // --- Lógica para Inscripciones Pendientes ---
 
         // Manejo del botón "Confirmar Todas las Inscripciones Pendientes"
-        document.getElementById('confirmAllEnrollmentsBtn')?.addEventListener('click', function() {
-            if (confirm('¿Estás seguro de que quieres CONFIRMAR TODAS las inscripciones pendientes en el sistema para el semestre actual?')) {
-                const formulario = document.createElement('form');
-                formulario.action = 'estudiantes.php';
-                formulario.method = 'POST';
-                formulario.style.display = 'none';
-                formulario.innerHTML = '<input type="hidden" name="action" value="confirm_all_enrollments">';
-                document.body.appendChild(formulario);
-                formulario.submit();
-            }
-        });
+        const confirmAllEnrollmentsBtn = document.getElementById('confirmAllEnrollmentsBtn');
+        if (confirmAllEnrollmentsBtn) { // <-- ¡Verificación clave añadida!
+            confirmAllEnrollmentsBtn.addEventListener('click', function() {
+                if (confirm('¿Estás seguro de que quieres CONFIRMAR TODAS las inscripciones pendientes en el sistema para el semestre actual?')) {
+                    const formulario = document.createElement('form');
+                    formulario.action = 'estudiantes.php';
+                    formulario.method = 'POST';
+                    formulario.style.display = 'none';
+                    formulario.innerHTML = '<input type="hidden" name="action" value="confirm_all_enrollments">';
+                    document.body.appendChild(formulario);
+                    formulario.submit();
+                }
+            });
+        }
 
         // Abrir Modal de Inscripciones Pendientes por Estudiante
         document.querySelectorAll('.view-enrollments-btn').forEach(boton => {
@@ -519,25 +529,30 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
                 const idUsuario = this.closest('tr').dataset.id_usuario;
                 const nombreEstudiante = this.closest('tr').dataset.nombre_estudiante;
 
-                document.getElementById('modalStudentName').textContent = nombreEstudiante;
-                document.getElementById('modalStudentUserId').value = idUsuario;
-                document.getElementById('confirmAllStudentId').value = idUsuario;
+                const modalStudentName = document.getElementById('modalStudentName');
+                const modalStudentUserId = document.getElementById('modalStudentUserId');
+                const confirmAllStudentId = document.getElementById('confirmAllStudentId');
+
+                if (modalStudentName) modalStudentName.textContent = nombreEstudiante;
+                if (modalStudentUserId) modalStudentUserId.value = idUsuario;
+                if (confirmAllStudentId) confirmAllStudentId.value = idUsuario;
+
 
                 const listaInscripciones = document.getElementById('enrollmentsList');
                 const cargandoInscripciones = document.getElementById('loadingEnrollments');
                 const mensajeSinInscripciones = document.getElementById('noPendingEnrollmentsMessage');
                 const botonConfirmarTodasEstudiante = document.getElementById('confirmAllStudentEnrollmentsBtn');
 
-                listaInscripciones.innerHTML = '';
-                cargandoInscripciones.style.display = 'block';
-                mensajeSinInscripciones.style.display = 'none';
-                botonConfirmarTodasEstudiante.style.display = 'none';
+                if (listaInscripciones) listaInscripciones.innerHTML = '';
+                if (cargandoInscripciones) cargandoInscripciones.style.display = 'block';
+                if (mensajeSinInscripciones) mensajeSinInscripciones.style.display = 'none';
+                if (botonConfirmarTodasEstudiante) botonConfirmarTodasEstudiante.style.display = 'none';
 
                 try {
                     const respuesta = await fetch(`../api/obtener_historial_academico_admin.php?accion=obtener_inscripciones_pendientes&id_usuario=${idUsuario}`);
                     const datos = await respuesta.json();
 
-                    cargandoInscripciones.style.display = 'none';
+                    if (cargandoInscripciones) cargandoInscripciones.style.display = 'none';
 
                     if (datos.success && datos.inscripciones.length > 0) {
                         datos.inscripciones.forEach(inscripcion => {
@@ -565,7 +580,7 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
                                                 <input type="hidden" name="action" value="reject_single_enrollment">
                                                 <input type="hidden" name="id_inscripcion" value="${inscripcion.id_inscripcion}">
                                                 <button type="submit" class="btn btn-danger btn-sm"
-                                                        onclick="return confirm('¿Rechazar (eliminar) inscripción para ${inscripcion.nombre_asignatura}?');">
+                                                        onclick="return confirm('¿Rechazar inscripción para ${inscripcion.nombre_asignatura}?');">
                                                     <i class="fas fa-times"></i> Rechazar
                                                 </button>
                                             </form>
@@ -573,427 +588,292 @@ $estados_finales = ['APROBADO', 'REPROBADO', 'PENDIENTE', 'RETIRADO']; // Define
                                     </div>
                                 </div>
                             `;
-                            listaInscripciones.insertAdjacentHTML('beforeend', htmlInscripcion);
+                            if (listaInscripciones) listaInscripciones.insertAdjacentHTML('beforeend', htmlInscripcion);
                         });
-                        botonConfirmarTodasEstudiante.style.display = 'block';
+                        if (botonConfirmarTodasEstudiante) botonConfirmarTodasEstudiante.style.display = 'block';
                     } else {
-                        mensajeSinInscripciones.style.display = 'block';
-                        botonConfirmarTodasEstudiante.style.display = 'none';
+                        if (mensajeSinInscripciones) mensajeSinInscripciones.style.display = 'block';
                     }
                 } catch (error) {
-                    cargandoInscripciones.style.display = 'none';
-                    mensajeSinInscripciones.textContent = 'Error al cargar las inscripciones: ' + error.message;
-                    mensajeSinInscripciones.style.display = 'block';
-                    console.error("Error al cargar inscripciones:", error);
+                    console.error('Error al obtener inscripciones pendientes:', error);
+                    if (cargandoInscripciones) cargandoInscripciones.style.display = 'none';
+                    if (listaInscripciones) listaInscripciones.innerHTML = `<div class="alert alert-danger">Error al cargar las inscripciones. Intente de nuevo.</div>`;
                 }
             });
         });
 
+        // --- Lógica para Historial Académico ---
 
-        // --- Lógica para Historial Académico (Ver) ---
-
+        // Abrir Modal de Historial Académico (Solo Lectura)
         document.querySelectorAll('.view-history-btn').forEach(boton => {
             boton.addEventListener('click', async function() {
                 const idUsuario = this.closest('tr').dataset.id_usuario;
                 const nombreEstudiante = this.closest('tr').dataset.nombre_estudiante;
 
-                document.getElementById('modalHistoryStudentName').textContent = nombreEstudiante;
-                document.getElementById('modalHistoryStudentUserId').value = idUsuario;
+                const modalHistoryStudentName = document.getElementById('modalHistoryStudentName');
+                const modalHistoryStudentUserId = document.getElementById('modalHistoryStudentUserId');
+                if (modalHistoryStudentName) modalHistoryStudentName.textContent = nombreEstudiante;
+                if (modalHistoryStudentUserId) modalHistoryStudentUserId.value = idUsuario;
 
-                const cuerpoTablaHistorialAcademico = document.getElementById('academicHistoryTableBody');
+
+                const historialContent = document.getElementById('academicHistoryContent');
                 const cargandoHistorial = document.getElementById('loadingHistory');
-                const mensajeSinHistorialAcademico = document.getElementById('noAcademicHistoryMessage');
-                const contenedorTablaHistorial = document.getElementById('historyTableContainer');
+                const tablaHistorial = document.getElementById('historyTableContainer');
+                const cuerpoTablaHistorial = document.getElementById('academicHistoryTableBody');
+                const noHistorialMessage = document.getElementById('noAcademicHistoryMessage');
 
-                cuerpoTablaHistorialAcademico.innerHTML = '';
-                cargandoHistorial.style.display = 'block';
-                mensajeSinHistorialAcademico.style.display = 'none';
-                contenedorTablaHistorial.style.display = 'none';
+                if (historialContent) {
+                    historialContent.innerHTML = ''; // Limpiar el contenido anterior
+                    if (cargandoHistorial) historialContent.appendChild(cargandoHistorial); // Restaurar el mensaje de carga
+                }
+                if (cargandoHistorial) cargandoHistorial.style.display = 'block';
+                if (tablaHistorial) tablaHistorial.style.display = 'none';
+                if (noHistorialMessage) noHistorialMessage.style.display = 'none';
+                if (cuerpoTablaHistorial) cuerpoTablaHistorial.innerHTML = ''; // Limpiar tbody
 
                 try {
-                    const respuesta = await fetch(`../api/obtener_historial_academico_admin.php?accion=obtener_historial_academico&id_usuario=${idUsuario}`);
+                    const respuesta = await fetch(`../api/obtener_historial_academico_admin.php?accion=obtener_historial&id_usuario=${idUsuario}`);
                     const datos = await respuesta.json();
 
-                    cargandoHistorial.style.display = 'none';
+                    if (cargandoHistorial) cargandoHistorial.style.display = 'none';
 
                     if (datos.success && datos.historial.length > 0) {
-                        contenedorTablaHistorial.style.display = 'block';
-                        datos.historial.forEach(entrada => {
+                        if (tablaHistorial) tablaHistorial.style.display = 'block';
+                        datos.historial.forEach(item => {
                             const fila = `
                                 <tr>
-                                    <td>${entrada.nombre_asignatura}</td>
-                                    <td>${entrada.codigo_asignatura}</td>
-                                    <td>${entrada.numero_semestre}</td>
-                                    <td>${entrada.nombre_anio}</td>
-                                    <td>${entrada.nota_final}</td>
-                                    <td>${entrada.estado_final}</td>
+                                    <td>${item.nombre_asignatura}</td>
+                                    <td>${item.codigo_asignatura}</td>
+                                    <td>${item.numero_semestre} (${item.nombre_anio})</td>
+                                    <td>${item.nombre_curso}</td>
+                                    <td>${item.nota_final !== null ? item.nota_final : 'N/A'}</td>
+                                    <td>${item.estado}</td>
                                 </tr>
                             `;
-                            cuerpoTablaHistorialAcademico.insertAdjacentHTML('beforeend', fila);
+                            if (cuerpoTablaHistorial) cuerpoTablaHistorial.insertAdjacentHTML('beforeend', fila);
                         });
                     } else {
-                        mensajeSinHistorialAcademico.style.display = 'block';
+                        if (noHistorialMessage) noHistorialMessage.style.display = 'block';
                     }
                 } catch (error) {
-                    cargandoHistorial.style.display = 'none';
-                    mensajeSinHistorialAcademico.textContent = 'Error al cargar el historial: ' + error.message;
-                    mensajeSinHistorialAcademico.style.display = 'block';
-                    console.error("Error al cargar historial:", error);
+                    console.error('Error al obtener historial académico:', error);
+                    if (cargandoHistorial) cargandoHistorial.style.display = 'none';
+                    if (historialContent) historialContent.innerHTML = `<div class="alert alert-danger">Error al cargar el historial. Intente de nuevo.</div>`;
                 }
             });
         });
 
-        // --- Lógica para Gestionar Historial Académico (Añadir/Editar/Eliminar) ---
-
-        // Función para cargar y mostrar el historial académico en el modal de gestión
-        async function cargarGestionHistorialAcademico(idUsuario) {
-            const cuerpoModal = document.getElementById('manageAcademicHistoryTableBody');
-            const mensajeCargando = document.getElementById('loadingHistoryManage');
-            const mensajeSinHistorial = document.getElementById('noCurrentHistoryToManageMessage');
-            const contenedorTablaHistorial = document.getElementById('currentHistoryTableContainer');
-
-            cuerpoModal.innerHTML = '';
-            mensajeCargando.style.display = 'block';
-            mensajeSinHistorial.style.display = 'none';
-            contenedorTablaHistorial.style.display = 'none';
-
-            try {
-                const respuesta = await fetch(`../api/obtener_historial_academico_admin.php?accion=obtener_historial_academico&id_usuario=${idUsuario}`);
-                const datos = await respuesta.json();
-
-                mensajeCargando.style.display = 'none';
-                if (datos.success && datos.historial.length > 0) {
-                    contenedorTablaHistorial.style.display = 'block';
-                    datos.historial.forEach(entrada => {
-                        const fila = `<tr data-id_historial="${entrada.id}"
-                                        data-id_asignatura="${entrada.id_asignatura}"
-                                        data-id_semestre="${entrada.id_semestre}"
-                                        data-nota_final="${entrada.nota_final}"
-                                        data-estado_final="${entrada.estado_final}">
-                                        <td>${entrada.nombre_asignatura}</td>
-                                        <td>${entrada.numero_semestre} (${entrada.nombre_anio})</td>
-                                        <td>${entrada.nota_final}</td>
-                                        <td>${entrada.estado_final}</td>
-                                        <td>
-                                            <button type="button" class="btn btn-sm btn-info editar-entrada-historial me-2" title="Editar">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-danger eliminar-entrada-historial" title="Eliminar">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </td>
-                                    </tr>`;
-                        cuerpoModal.insertAdjacentHTML('beforeend', fila);
-                    });
-                } else {
-                    mensajeSinHistorial.style.display = 'block';
-                }
-            } catch (error) {
-                mensajeCargando.style.display = 'none';
-                mensajeSinHistorial.style.display = 'block';
-                console.error("Error al cargar historial para gestión:", error);
-                alert("Error al cargar el historial académico del estudiante. Inténtalo de nuevo.");
-            }
-        }
-
-        // Event listener para los botones "Gestionar Historial"
+        // Abrir Modal de Gestión de Historial Académico
         document.querySelectorAll('.manage-history-btn').forEach(boton => {
             boton.addEventListener('click', function() {
-                const idUsuario = this.closest('tr').dataset.id_usuario;
+                const idEstudianteDb = this.closest('tr').dataset.id_estudiante_db;
                 const nombreEstudiante = this.closest('tr').dataset.nombre_estudiante;
 
-                document.getElementById('manageHistoryStudentUserId').value = idUsuario;
-                document.getElementById('manageHistoryStudentName').textContent = nombreEstudiante;
+                const manageHistoryStudentName = document.getElementById('manageHistoryStudentName');
+                if (manageHistoryStudentName) manageHistoryStudentName.textContent = nombreEstudiante;
 
-                // Resetear el formulario a modo "añadir"
-                document.getElementById('operacionHistorial').value = 'add';
-                document.getElementById('idHistorialEntry').value = '';
-                document.getElementById('asignaturaSelect').value = '';
-                document.getElementById('semestreSelect').value = '';
-                document.getElementById('notaFinal').value = '';
-                document.getElementById('estadoFinal').value = '';
-                document.getElementById('saveHistoryEntryBtn').innerHTML = '<i class="fas fa-save me-2"></i> Guardar Historial';
-                document.getElementById('saveHistoryEntryBtn').classList.remove('btn-warning');
-                document.getElementById('saveHistoryEntryBtn').classList.add('btn-primary');
-                document.getElementById('deleteHistoryEntryBtn').style.display = 'none';
-                document.getElementById('editDeleteHistoryMessage').style.display = 'none';
 
-                cargarGestionHistorialAcademico(idUsuario); // Cargar el historial para edición/eliminación
+                const manageHistoryStudentDbIdInput = document.getElementById('manageHistoryStudentDbId');
+                if (manageHistoryStudentDbIdInput) { // <-- ¡Aquí está la verificación clave para este error!
+                    manageHistoryStudentDbIdInput.value = idEstudianteDb;
+                } else {
+                    console.error("Error: El elemento con ID 'manageHistoryStudentDbId' no fue encontrado en el DOM.");
+                    // Opcional: podrías mostrar un mensaje al usuario aquí
+                }
+
+                // Restablecer los select y el contenedor de asignaturas
+                const historyAnioSelect = document.getElementById('historyAnioSelect');
+                const historySemestreSelect = document.getElementById('historySemestreSelect');
+                const asignaturasContainer = document.getElementById('asignaturasContainer');
+                const initialPrompt = document.getElementById('initialPrompt');
+                const noAsignaturasMessage = document.getElementById('noAsignaturasMessage');
+                const editDeleteHistoryMessage = document.getElementById('editDeleteHistoryMessage');
+
+                if (historyAnioSelect) historyAnioSelect.value = '';
+                if (historySemestreSelect) {
+                    historySemestreSelect.innerHTML = '<option value="">Seleccione un semestre</option>';
+                    historySemestreSelect.disabled = true;
+                }
+                if (asignaturasContainer) asignaturasContainer.innerHTML = '';
+                if (initialPrompt) initialPrompt.style.display = 'block';
+                if (asignaturasContainer && initialPrompt) asignaturasContainer.appendChild(initialPrompt); // Asegura que el prompt esté dentro
+                if (noAsignaturasMessage) noAsignaturasMessage.style.display = 'none';
+                if (editDeleteHistoryMessage) editDeleteHistoryMessage.style.display = 'none';
             });
         });
 
-        // Event listener para clic en una fila de historial para editar/eliminar
-        document.getElementById('manageAcademicHistoryTableBody').addEventListener('click', function(evento) {
-            if (evento.target.closest('.editar-entrada-historial')) {
-                const boton = evento.target.closest('.editar-entrada-historial');
-                const fila = boton.closest('tr');
-                const idHistorial = fila.dataset.id_historial;
-                const idAsignatura = fila.dataset.id_asignatura;
-                const idSemestre = fila.dataset.id_semestre;
-                const notaFinal = fila.dataset.nota_final;
-                const estadoFinal = fila.dataset.estado_final;
+        // Cargar semestres cuando se selecciona un año en el modal de gestión de historial
+        const historyAnioSelect = document.getElementById('historyAnioSelect');
+        const historySemestreSelect = document.getElementById('historySemestreSelect');
+        const asignaturasContainer = document.getElementById('asignaturasContainer');
+        const initialPrompt = document.getElementById('initialPrompt');
+        const noAsignaturasMessage = document.getElementById('noAsignaturasMessage');
+        const editDeleteHistoryMessage = document.getElementById('editDeleteHistoryMessage');
+        const todosSemestresDisponibles = <?php echo json_encode($semestres_disponibles); ?>;
+        const todosAsignaturas = <?php echo json_encode($asignaturas); ?>; // Aunque no se usa directamente aquí, es buena práctica tenerlo
+        const estadosFinales = <?php echo json_encode($estados_finales); ?>;
 
-                // Llenar el formulario con los datos de la fila
-                document.getElementById('operacionHistorial').value = 'edit';
-                document.getElementById('idHistorialEntry').value = idHistorial;
-                document.getElementById('asignaturaSelect').value = idAsignatura;
-                document.getElementById('semestreSelect').value = idSemestre;
-                document.getElementById('notaFinal').value = notaFinal;
-                document.getElementById('estadoFinal').value = estadoFinal;
+        if (historyAnioSelect && historySemestreSelect && asignaturasContainer) {
+            historyAnioSelect.addEventListener('change', function() {
+                const idAnioSeleccionado = this.value;
+                historySemestreSelect.innerHTML = '<option value="">Seleccione un semestre</option>';
+                historySemestreSelect.disabled = true;
+                asignaturasContainer.innerHTML = '';
+                if (initialPrompt) initialPrompt.style.display = 'block';
+                if (noAsignaturasMessage) noAsignaturasMessage.style.display = 'none';
+                if (editDeleteHistoryMessage) editDeleteHistoryMessage.style.display = 'none';
 
-                // Cambiar el texto del botón y mostrar el botón de eliminar
-                document.getElementById('saveHistoryEntryBtn').innerHTML = '<i class="fas fa-edit me-2"></i> Actualizar Historial';
-                document.getElementById('saveHistoryEntryBtn').classList.remove('btn-primary');
-                document.getElementById('saveHistoryEntryBtn').classList.add('btn-warning');
-                document.getElementById('deleteHistoryEntryBtn').style.display = 'block';
-                document.getElementById('editDeleteHistoryMessage').style.display = 'block';
-            }
-
-            if (evento.target.closest('.eliminar-entrada-historial')) {
-                const boton = evento.target.closest('.eliminar-entrada-historial');
-                const fila = boton.closest('tr');
-                const idHistorial = fila.dataset.id_historial;
-                const nombreAsignatura = fila.children[0].textContent;
-                const semestreAsignatura = fila.children[1].textContent;
-
-                if (confirm(`¿Estás seguro de que quieres ELIMINAR la entrada de historial para "${nombreAsignatura}" del ${semestreAsignatura}?`)) {
-                    // Configurar el formulario para la operación de eliminación
-                    document.getElementById('operacionHistorial').value = 'delete';
-                    document.getElementById('idHistorialEntry').value = idHistorial;
-                    // Enviar el formulario
-                    document.getElementById('academicHistoryForm').submit();
+                if (idAnioSeleccionado) {
+                    const semestresFiltrados = todosSemestresDisponibles.filter(semestre =>
+                        semestre.id_anio_academico == idAnioSeleccionado // Usa == para comparar string con number si es necesario
+                    );
+                    semestresFiltrados.forEach(semestre => {
+                        const option = document.createElement('option');
+                        option.value = semestre.id;
+                        option.textContent = `${semestre.numero_semestre} (${semestre.nombre_anio})`;
+                        historySemestreSelect.appendChild(option);
+                    });
+                    historySemestreSelect.disabled = false;
                 }
-            }
-        });
+            });
 
-        // Asegurarse de que el formulario se envíe con la operación correcta al guardar
-        document.getElementById('academicHistoryForm')?.addEventListener('submit', function(e) {
-            return true;
-        });
+            historySemestreSelect.addEventListener('change', async function() {
+                const idSemestreSeleccionado = this.value;
+                const manageHistoryStudentDbIdInput = document.getElementById('manageHistoryStudentDbId');
+                const idEstudianteDb = manageHistoryStudentDbIdInput ? manageHistoryStudentDbIdInput.value : null;
 
+                asignaturasContainer.innerHTML = '';
+                if (initialPrompt) initialPrompt.style.display = 'none';
+                if (noAsignaturasMessage) noAsignaturasMessage.style.display = 'none';
+                if (editDeleteHistoryMessage) editDeleteHistoryMessage.style.display = 'none';
 
+                if (idSemestreSeleccionado && idEstudianteDb) {
+                    try {
+                        const respuesta = await fetch(`../api/obtener_historial_academico_admin.php?accion=obtener_asignaturas_semestre_y_historial_existente&id_semestre=${idSemestreSeleccionado}&id_estudiante_db=${idEstudianteDb}`);
+                        const datos = await respuesta.json();
 
+                        if (datos.success && datos.asignaturas_semestre && datos.asignaturas_semestre.length > 0) {
+                            if (editDeleteHistoryMessage) editDeleteHistoryMessage.style.display = 'block';
 
+                            datos.asignaturas_semestre.forEach(asignatura => {
+                                const historialExistente = datos.historial_existente.find(h => h.id_asignatura == asignatura.id);
+                                const notaValue = historialExistente ? (historialExistente.nota_final !== null ? historialExistente.nota_final : '') : '';
+                                const estadoValue = historialExistente ? historialExistente.estado : '';
+                                const idHistorialExistente = historialExistente ? historialExistente.id_historial : '';
 
+                                const estadoOptions = estadosFinales.map(estado =>
+                                    `<option value="${estado}" ${estado === estadoValue ? 'selected' : ''}>${estado}</option>`
+                                ).join('');
 
+                                const asignaturaHtml = `
+                                    <div class="row mb-3 align-items-center border-bottom pb-2">
+                                        <input type="hidden" name="asignaturas[${asignatura.id}][id_asignatura]" value="${asignatura.id}">
+                                        <input type="hidden" name="asignaturas[${asignatura.id}][id_historial_existente]" value="${idHistorialExistente}">
+                                        <div class="col-md-4">
+                                            <label class="form-label mb-0"><strong>${asignatura.nombre_asignatura}</strong></label>
+                                            <small class="text-muted d-block">${asignatura.codigo_asignatura}</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="nota_final_${asignatura.id}" class="form-label">Nota Final:</label>
+                                            <input type="number" step="0.01" min="0" max="100" class="form-control"
+                                                   id="nota_final_${asignatura.id}" name="asignaturas[${asignatura.id}][nota_final]"
+                                                   value="${notaValue}">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="estado_${asignatura.id}" class="form-label">Estado:</label>
+                                            <select class="form-select" id="estado_${asignatura.id}"
+                                                    name="asignaturas[${asignatura.id}][estado]" required>
+                                                <option value="">Seleccione</option>
+                                                ${estadoOptions}
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 text-end">
+                                            ${idHistorialExistente ? `
+                                                <button type="button" class="btn btn-danger btn-sm delete-history-entry-btn"
+                                                        data-id-historial="${idHistorialExistente}"
+                                                        onclick="return confirm('¿Está seguro de que desea eliminar este registro de historial?');">
+                                                    <i class="fas fa-trash-alt"></i> Eliminar
+                                                </button>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                                asignaturasContainer.insertAdjacentHTML('beforeend', asignaturaHtml);
+                            });
 
+                            // Event listener para botones de eliminar (delegación de eventos si es posible, o directo si se añaden pocos)
+                            asignaturasContainer.querySelectorAll('.delete-history-entry-btn').forEach(btn => {
+                                btn.addEventListener('click', async function() {
+                                    const idHistorial = this.dataset.idHistorial;
+                                    if (confirm('¿Estás seguro de que deseas eliminar este registro del historial?')) {
+                                        try {
+                                            const formEliminar = document.createElement('form');
+                                            formEliminar.action = '../api/guardar_historial_anterior.php';
+                                            formEliminar.method = 'POST';
+                                            formEliminar.style.display = 'none';
+                                            formEliminar.innerHTML = `
+                                                <input type="hidden" name="action" value="eliminar_historial">
+                                                <input type="hidden" name="id_historial" value="${idHistorial}">
+                                            `;
+                                            document.body.appendChild(formEliminar);
+                                            formEliminar.submit();
+                                        } catch (error) {
+                                            console.error('Error al eliminar historial:', error);
+                                            alert('Hubo un error al intentar eliminar el registro.');
+                                        }
+                                    }
+                                });
+                            });
 
-
-
-
-
-        // ... (código JavaScript existente) ...
-
-// Variables para el historial académico
-let currentManagingStudentDbId = null;
-
-// Event listener para el botón "Gestionar Historial"
-document.querySelectorAll('.manage-history-btn').forEach(button => {
-    button.addEventListener('click', function() {
-        const studentRow = this.closest('tr');
-        const studentName = studentRow.dataset.nombre_estudiante;
-        currentManagingStudentDbId = studentRow.dataset.id_estudiante_db; // Obtener el ID de la tabla estudiantes
-
-        document.getElementById('manageHistoryStudentName').textContent = studentName;
-        document.getElementById('manageHistoryStudentDbId').value = currentManagingStudentDbId;
-
-        // Limpiar y resetear el formulario al abrir el modal
-        document.getElementById('academicHistoryForm').reset();
-        document.getElementById('historyAnioSelect').value = '';
-        document.getElementById('historySemestreSelect').innerHTML = '<option value="">Seleccione un semestre</option>';
-        document.getElementById('historySemestreSelect').disabled = true;
-        document.getElementById('asignaturasContainer').innerHTML = '<p class="text-center text-muted" id="initialPrompt">Por favor, seleccione un Año y un Semestre para cargar las asignaturas.</p>';
-        document.getElementById('noAsignaturasMessage').style.display = 'none';
-        document.getElementById('editDeleteHistoryMessage').style.display = 'none';
-        document.getElementById('currentHistoryTableContainer').style.display = 'none'; // Ocultar tabla de historial actual si existiera
-        document.getElementById('noCurrentHistoryToManageMessage').style.display = 'none'; // Ocultar mensaje de no historial
-        document.getElementById('loadingHistoryManage').style.display = 'none'; // Ocultar mensaje de carga
-
-        // No precargar historial en este modal, el objetivo es añadir/actualizar por semestre.
-        // La vista de historial es para 'academicHistoryModal'.
-    });
-});
-
-// Lógica para cargar semestres basados en el año académico seleccionado
-document.getElementById('historyAnioSelect')?.addEventListener('change', async function() {
-    const idAnio = this.value;
-    const semestreSelect = document.getElementById('historySemestreSelect');
-    const asignaturasContainer = document.getElementById('asignaturasContainer');
-    const noAsignaturasMessage = document.getElementById('noAsignaturasMessage');
-    const initialPrompt = document.getElementById('initialPrompt');
-
-    semestreSelect.innerHTML = '<option value="">Cargando semestres...</option>';
-    semestreSelect.disabled = true;
-    asignaturasContainer.innerHTML = '';
-    noAsignaturasMessage.style.display = 'none';
-    initialPrompt.style.display = 'block';
-
-    if (idAnio) {
-        try {
-            const response = await fetch(`../api/obtener_semestre_por_anio.php?id_anio=${idAnio}`);
-            const data = await response.json();
-
-            semestreSelect.innerHTML = '<option value="">Seleccione un semestre</option>';
-            if (data.status && data.data.length > 0) {
-                data.data.forEach(semestre => {
-                    const option = document.createElement('option');
-                    option.value = semestre.id;
-                    option.textContent = `${semestre.numero_semestre}º Semestre`;
-                    semestreSelect.appendChild(option);
-                });
-                semestreSelect.disabled = false;
-            } else {
-                semestreSelect.innerHTML = '<option value="">No hay semestres para este año</option>';
-            }
-        } catch (error) {
-            console.error('Error al cargar semestres:', error);
-            semestreSelect.innerHTML = '<option value="">Error al cargar semestres</option>';
-        }
-    }
-});
-
-// Lógica para cargar asignaturas cuando se selecciona un semestre
-document.getElementById('historySemestreSelect')?.addEventListener('change', async function() {
-    const idSemestre = this.value;
-    const asignaturasContainer = document.getElementById('asignaturasContainer');
-    const noAsignaturasMessage = document.getElementById('noAsignaturasMessage');
-    const initialPrompt = document.getElementById('initialPrompt');
-    const studentDbId = document.getElementById('manageHistoryStudentDbId').value; // El ID del estudiante de la tabla 'estudiantes'
-
-    asignaturasContainer.innerHTML = '<p class="text-center text-muted">Cargando asignaturas...</p>';
-    noAsignaturasMessage.style.display = 'none';
-    initialPrompt.style.display = 'none';
-
-    if (idSemestre && studentDbId) {
-        try {
-            // Nueva API endpoint para obtener asignaturas del semestre y notas del estudiante
-            const response = await fetch(`../api/obtener_asignaturas_con_historial.php?id_semestre=${idSemestre}&id_estudiante=${studentDbId}`);
-            const data = await response.json();
-
-            asignaturasContainer.innerHTML = ''; // Limpiar antes de añadir nuevas asignaturas
-
-            if (data.status && data.data.length > 0) {
-                data.data.forEach(asignatura => {
-                    const nota = asignatura.nota_final !== null ? asignatura.nota_final : '';
-                    const estado = asignatura.estado_final !== null ? asignatura.estado_final : '';
-
-                    const asignaturaRow = `
-                        <div class="row mb-3 align-items-center border-bottom pb-2">
-                            <div class="col-md-5">
-                                <label class="form-label mb-0"><strong>${asignatura.nombre_asignatura}</strong> (Créditos: ${asignatura.creditos})</label>
-                                <input type="hidden" name="asignaturas[${asignatura.id}][id_asignatura]" value="${asignatura.id}">
-                                <input type="hidden" name="asignaturas[${asignatura.id}][id_historial]" value="${asignatura.id_historial || ''}">
-                            </div>
-                            <div class="col-md-3">
-                                <label for="nota_${asignatura.id}" class="form-label-sm">Nota:</label>
-                                <input type="number" class="form-control form-control-sm" id="nota_${asignatura.id}" name="asignaturas[${asignatura.id}][nota_final]" step="0.01" min="0" max="10" value="${nota}">
-                            </div>
-                            <div class="col-md-4">
-                                <label for="estado_${asignatura.id}" class="form-label-sm">Estado:</label>
-                                <select class="form-select form-select-sm" id="estado_${asignatura.id}" name="asignaturas[${asignatura.id}][estado_final]">
-                                    <option value="">Seleccione</option>
-                                    <option value="APROBADO" ${estado === 'APROBADO' ? 'selected' : ''}>APROBADO</option>
-                                    <option value="REPROBADO" ${estado === 'REPROBADO' ? 'selected' : ''}>REPROBADO</option>
-                                    <option value="PENDIENTE" ${estado === 'PENDIENTE' ? 'selected' : ''}>PENDIENTE</option>
-                                    <option value="RETIRADO" ${estado === 'RETIRADO' ? 'selected' : ''}>RETIRADO</option>
-                                </select>
-                            </div>
-                        </div>
-                    `;
-                    asignaturasContainer.innerHTML += asignaturaRow;
-                });
-                document.getElementById('editDeleteHistoryMessage').style.display = 'block'; // Mostrar mensaje de info
-            } else {
-                noAsignaturasMessage.style.display = 'block';
-                asignaturasContainer.innerHTML = ''; // Asegurarse de que esté vacío
-            }
-        } catch (error) {
-            console.error('Error al cargar asignaturas o historial:', error);
-            asignaturasContainer.innerHTML = '<div class="alert alert-danger">Error al cargar asignaturas. Intente de nuevo.</div>';
-        }
-    } else {
-        // Si no hay semestre o estudiante seleccionado, no mostrar nada
-        asignaturasContainer.innerHTML = '';
-        initialPrompt.style.display = 'block';
-    }
-});
-
-// Listener para el envío del formulario del historial
-document.getElementById('academicHistoryForm')?.addEventListener('submit', async function(event) {
-    event.preventDefault(); // Evitar el envío tradicional del formulario
-
-    const form = event.target;
-    const formData = new FormData(form);
-
-    // Iterar sobre las asignaturas y limpiar los campos vacíos
-    // Esto es crucial para no enviar asignaturas sin nota/estado
-    const asignaturasData = {};
-    for (let [key, value] of formData.entries()) {
-        if (key.startsWith('asignaturas[')) {
-            const match = key.match(/asignaturas\[(\d+)\]\[(id_asignatura|id_historial|nota_final|estado_final)\]/);
-            if (match) {
-                const idAsignatura = match[1];
-                const fieldName = match[2];
-                if (!asignaturasData[idAsignatura]) {
-                    asignaturasData[idAsignatura] = {};
+                        } else {
+                            if (noAsignaturasMessage) noAsignaturasMessage.style.display = 'block';
+                        }
+                    } catch (error) {
+                        console.error('Error al cargar asignaturas del semestre o historial existente:', error);
+                        asignaturasContainer.innerHTML = `<div class="alert alert-danger">Error al cargar las asignaturas. Intente de nuevo.</div>`;
+                    }
+                } else {
+                    if (initialPrompt) initialPrompt.style.display = 'block';
                 }
-                asignaturasData[idAsignatura][fieldName] = value;
-            }
+            });
         }
-    }
 
-    // Filtrar asignaturas que no tengan ni nota ni estado
-    const filteredAsignaturas = Object.values(asignaturasData).filter(asignatura => {
-        return asignatura.nota_final !== '' || asignatura.estado_final !== '';
-    });
+        // Manejar el submit del formulario de historial académico
+        const academicHistoryForm = document.getElementById('academicHistoryForm');
+        if (academicHistoryForm) {
+            academicHistoryForm.addEventListener('submit', async function(e) {
+                e.preventDefault(); // Prevenir el envío normal del formulario
 
-    // Reconstruir formData con solo las asignaturas que tienen datos
-    const newFormData = new FormData();
-    newFormData.append('action', formData.get('action'));
-    newFormData.append('id_estudiante_db', formData.get('id_estudiante_db'));
-    newFormData.append('id_anio_academico', formData.get('id_anio_academico'));
-    newFormData.append('id_semestre', formData.get('id_semestre'));
+                const formData = new FormData(this);
+                const actionInput = formData.get('action'); // Obtener el valor del campo 'action'
 
-    filteredAsignaturas.forEach((asignatura, index) => {
-        for (const key in asignatura) {
-            newFormData.append(`asignaturas[${asignatura.id_asignatura}][${key}]`, asignatura[key]);
+                // Verificar si la acción es "eliminar_historial", en cuyo caso no se usará este listener
+                // (ya que los botones de eliminar individuales manejan su propio submit)
+                if (actionInput === 'eliminar_historial') {
+                    return;
+                }
+
+                try {
+                    const response = await fetch(this.action, { // Usar this.action para la URL del formulario
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        alert(result.message);
+                        // Recargar la página o el modal para reflejar los cambios
+                        window.location.reload(); // Opción simple: recargar toda la página
+                    } else {
+                        alert('Error: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('Error al guardar el historial:', error);
+                    alert('Hubo un error al procesar la solicitud.');
+                }
+            });
         }
-    });
 
-    if (filteredAsignaturas.length === 0) {
-        alert('Por favor, ingrese al menos una nota o estado para una asignatura.');
-        return;
-    }
-
-    try {
-        const response = await fetch(form.action, {
-            method: 'POST',
-            body: newFormData
-        });
-
-        const result = await response.json();
-
-        if (result.status) {
-            alert('Historial académico guardado exitosamente.');
-            // Opcional: Cerrar modal y recargar la lista de estudiantes o solo el historial del estudiante
-            // Bootstrap 5 modal close:
-            const modal = bootstrap.Modal.getInstance(document.getElementById('manageAcademicHistoryModal'));
-            modal.hide();
-            // Podrías recargar la tabla completa o actualizar solo la fila del estudiante
-            // window.location.reload(); // Simple pero recarga todo
-            // O re-ejecutar la lógica para cargar todos los estudiantes activos
-            // paginarTabla('studentsTableAll', 'paginationAll', elementosPorPaginaTodos);
-            // Si gestionas el historial por id_estudiante, puedes recargar solo el historial de ese estudiante
-            fetchAcademicHistory(currentManagingStudentDbId); // Función que carga el historial para el modal de "Ver Historial"
-        } else {
-            alert('Error al guardar historial: ' + result.message);
-        }
-    } catch (error) {
-        console.error('Error al enviar el formulario:', error);
-        alert('Ocurrió un error al intentar guardar el historial.');
-    }
-});
-
-// ... (Resto de tu JS para otros modales y funciones) ...
     }); // Fin DOMContentLoaded
 </script>
