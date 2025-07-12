@@ -103,9 +103,8 @@ try {
 
     // --- 3. Obtener detalles del Departamento/Institución para encabezados/pies de página ---
     // Asumimos que la tabla 'departamento' contiene los detalles de la institución principal (ej. id_departamento = 1)
-    // Y que el nombre del departamento para Informática de Gestión está en un registro con id_departamento específico
     $stmt_institution = $pdo->prepare("
-        SELECT nombre, universidad, logo_unge
+        SELECT nombre, universidad, logo_unge, logo_pais
         FROM departamento
         WHERE id_departamento = 1 -- Ajusta este ID si tu institución principal tiene un ID diferente
         LIMIT 1
@@ -117,7 +116,7 @@ try {
     $stmt_department = $pdo->prepare("
         SELECT nombre
         FROM departamento
-        
+        WHERE id_departamento = 2 -- Ajusta este ID al ID de tu departamento específico (ej. Informática de Gestión)
         LIMIT 1
     ");
     $stmt_department->execute();
@@ -125,13 +124,17 @@ try {
 
     // Proporcionar valores por defecto si los detalles no se encuentran
     $institutionName = $institution_details['universidad'] ?? 'UNIVERSIDAD NACIONAL DE GUINEA ECUATORIAL';
-    $facultyName = 'Facultad de Ciencias Económicas'; // Nombre de la facultad fijo
+    $facultyName = 'Facultad de Ciencias Económicas y Empresariales'; // Nombre de la facultad fijo
     $departmentName = $specific_department_name ?? 'Departamento de Informática de Gestión'; // Nombre del departamento, con fallback
     $ungeLogoPath = $institution_details['logo_unge'] ?? '../assets/img/logo_unge.png'; // Ruta por defecto al logo UNGE
+    $countryLogoPath = $institution_details['logo_pais'] ?? '../assets/img/logo_pais.png'; // Ruta por defecto al logo del país
 
     // Ajustar la ruta del logo si se almacena sin el prefijo '../'
     if ($ungeLogoPath && strpos($ungeLogoPath, '../') !== 0 && file_exists('../' . $ungeLogoPath)) {
         $ungeLogoPath = '../' . $ungeLogoPath;
+    }
+    if ($countryLogoPath && strpos($countryLogoPath, '../') !== 0 && file_exists('../' . $countryLogoPath)) {
+        $countryLogoPath = '../' . $countryLogoPath;
     }
 
 
@@ -140,13 +143,14 @@ try {
     {
         private $headerTitle = 'Historial Académico Estudiantil';
         private $ungeLogoPath;
+        private $countryLogoPath;
         private $institutionName;
         private $facultyName;
         private $departmentName;
         private $studentName;
         private $studentRegistrationCode;
 
-        function __construct($orientation = 'P', $unit = 'mm', $size = 'A4', $studentName = '', $studentRegistrationCode = '', $institutionName = '', $facultyName = '', $departmentName = '', $ungeLogoPath = '')
+        function __construct($orientation = 'P', $unit = 'mm', $size = 'A4', $studentName = '', $studentRegistrationCode = '', $institutionName = '', $facultyName = '', $departmentName = '', $ungeLogoPath = '', $countryLogoPath = '')
         {
             parent::__construct($orientation, $unit, $size);
             $this->studentName = $studentName;
@@ -155,45 +159,59 @@ try {
             $this->facultyName = $facultyName;
             $this->departmentName = $departmentName;
             $this->ungeLogoPath = $ungeLogoPath;
+            $this->countryLogoPath = $countryLogoPath;
         }
 
         // Encabezado
         function Header()
         {
-            // Logo UNGE (Izquierda) - Aumentar un poco el tamaño Y para el espacio
+            // Logo UNGE (Izquierda)
             $logoHeight = 25; // Alto del logo
+            $logoWidth = 25; // Ancho del logo, asumiendo una relación de aspecto similar
+            $margin = 10; // Margen izquierdo
+
             if (file_exists($this->ungeLogoPath)) {
-                $this->Image(utf8_decode($this->ungeLogoPath), 10, 8, $logoHeight); // X, Y, Alto
+                $this->Image(utf8_decode($this->ungeLogoPath), $margin, 8, $logoWidth, $logoHeight);
             } else {
                 $this->SetFont('Arial', 'B', 10);
                 $this->SetTextColor(50, 50, 50);
                 $this->Cell(30, 10, utf8_decode('UNGE'), 0, 0, 'L');
             }
 
-            // Establecer posición para los textos del encabezado (a la derecha del logo)
-            $textStartX = 40; // Donde empieza el texto, después del logo (10 + 25 + 5 de margen)
-            $this->SetX($textStartX);
+            // Logo del País (Derecha)
+            if (file_exists($this->countryLogoPath)) {
+                // Cálculo de posición: Ancho de página (210 para A4) - margen derecho - ancho del logo
+                $this->Image(utf8_decode($this->countryLogoPath), 210 - $margin - $logoWidth, 8, $logoWidth, $logoHeight);
+            } else {
+                // Podrías añadir un texto de marcador de posición si el logo falta, similar al logo de la UNGE
+            }
 
-            // Nombre de la Institución (al lado del logo, letra de título)
+            // Establecer posición para los textos del encabezado (centrado entre los logos)
+            $textStartX = $margin + $logoWidth + 5; // Comienza después del logo UNGE + un pequeño espacio
+            $textEndX = 210 - $margin - $logoWidth - 5; // Termina antes del logo del País + un pequeño espacio
+            $textWidth = $textEndX - $textStartX;
+
+            // Nombre de la Institución (centrado entre logos)
+            $this->SetY(8); // Reiniciar Y al principio para el texto principal del encabezado
+            $this->SetX($textStartX);
             $this->SetFont('Arial', 'B', 14);
             $this->SetTextColor(30, 30, 100); // Azul oscuro institucional
-            $this->Cell(0, 7, utf8_decode($this->institutionName), 0, 1, 'L'); // 'L' para alinear a la izquierda del área de celda
+            $this->Cell($textWidth, 7, utf8_decode($this->institutionName), 0, 1, 'C'); // 'C' para centrar
 
-            // Facultad de Ciencias Económicas y Empresariales
+            // Facultad
             $this->SetX($textStartX);
             $this->SetFont('Arial', 'B', 12);
             $this->SetTextColor(50, 50, 50); // Un color un poco más suave
-            $this->Cell(0, 6, utf8_decode($this->facultyName), 0, 1, 'L');
+            $this->Cell($textWidth, 6, utf8_decode($this->facultyName), 0, 1, 'C');
 
             // Nombre del Departamento
             $this->SetX($textStartX);
             $this->SetFont('Arial', '', 11); // Fuente normal, tamaño un poco más pequeño
             $this->SetTextColor(80, 80, 80); // Gris más claro
-            $this->Cell(0, 6, utf8_decode($this->departmentName), 0, 1, 'L');
+            $this->Cell($textWidth, 6, utf8_decode($this->departmentName), 0, 1, 'C');
             $this->Ln(3); // Pequeño espacio
 
             // Título principal del documento (centrado debajo de la información institucional)
-            // Resetear X para centrar en todo el ancho
             $this->SetX(10);
             $this->SetFont('Arial', 'B', 16);
             $this->SetTextColor(30, 30, 100);
@@ -209,8 +227,8 @@ try {
             // Información del estudiante (debajo de la línea separadora)
             $this->SetFont('Arial', 'B', 11);
             $this->SetTextColor(0, 0, 0); // Negro
-            $this->Cell(0, 7, utf8_decode('Estudiante: ') . utf8_decode($this->studentName), 0, 0, 'L');
-            $this->Cell(0, 7, utf8_decode('Cód. Registro: ') . utf8_decode($this->studentRegistrationCode), 0, 1, 'R');
+            $this->Cell(95, 7, utf8_decode('Estudiante: ') . utf8_decode($this->studentName), 0, 0, 'L');
+            $this->Cell(95, 7, utf8_decode('Cód. Registro: ') . utf8_decode($this->studentRegistrationCode), 0, 1, 'R');
             $this->Ln(5); // Espacio antes de la tabla
         }
 
@@ -254,27 +272,27 @@ try {
                 // Asegurar que el texto se ajuste a las celdas y los caracteres especiales se manejen
                 $this->Cell($w[0], 6, utf8_decode($row['nombre_asignatura']), 'LR', 0, 'L', $fill);
                 $this->Cell($w[1], 6, utf8_decode($row['numero_semestre']), 'LR', 0, 'C', $fill);
-                
+
                 // CORRECCIÓN: Formatear el año académico para evitar la duplicación
                 // Si el año académico es igual al año de inicio del semestre, solo muestra el año académico.
                 // Si son diferentes, muestra el año académico y el rango del semestre entre paréntesis.
                 $anioAcademico = utf8_decode($row['anio_academico']);
                 $semestreInicioYear = substr($row['semestre_inicio'], 0, 4);
                 $semestreFinYear = substr($row['semestre_fin'], 0, 4);
-                
+
                 $displayAnio = $anioAcademico;
                 if ($semestreInicioYear !== $anioAcademico || $semestreFinYear !== $anioAcademico) {
                     // Solo si el año académico es diferente al rango del semestre, añadimos el rango
                     if ($semestreInicioYear == $semestreFinYear) {
-                         $displayAnio .= ' (' . $semestreInicioYear . ')';
+                        $displayAnio .= ' (' . $semestreInicioYear . ')';
                     } else {
-                         $displayAnio .= ' (' . $semestreInicioYear . '-' . $semestreFinYear . ')';
+                        $displayAnio .= ' (' . $semestreInicioYear . '-' . $semestreFinYear . ')';
                     }
                 }
-                
+
                 $this->Cell($w[2], 6, $displayAnio, 'LR', 0, 'C', $fill);
                 $this->Cell($w[3], 6, number_format($row['nota_final'], 2), 'LR', 0, 'C', $fill);
-                
+
                 // Estilo para el estado
                 $estado = utf8_decode($row['estado_final']);
                 $this->SetTextColor(0); // Restablecer color de texto
@@ -286,7 +304,7 @@ try {
                     $this->SetTextColor(100, 100, 0); // Naranja/Marrón para Pendiente/Otro
                 }
                 $this->Cell($w[4], 6, $estado, 'LR', 0, 'C', $fill);
-                
+
                 $this->SetTextColor(0); // Restablecer color de texto a negro para la siguiente fila
                 $this->Ln();
                 $fill = !$fill; // Alternar color
@@ -299,13 +317,18 @@ try {
 
     // --- 5. Instanciar y configurar el PDF ---
     // Pasar los detalles dinámicos de la institución al constructor de la clase PDF
-    $pdf = new PDF('P', 'mm', 'A4',
-                   $student_details['nombre_completo'],
-                   $student_details['codigo_registro'],
-                   $institutionName,
-                   $facultyName,
-                   $departmentName,
-                   $ungeLogoPath);
+    $pdf = new PDF(
+        'P',
+        'mm',
+        'A4',
+        $student_details['nombre_completo'],
+        $student_details['codigo_registro'],
+        $institutionName,
+        $facultyName,
+        $departmentName,
+        $ungeLogoPath,
+        $countryLogoPath // Pasar la ruta del logo del país
+    );
     $pdf->AliasNbPages(); // Necesario para el conteo total de páginas
     $pdf->AddPage();
     $pdf->SetMargins(10, 10, 10); // Márgenes (izquierda, arriba, derecha)

@@ -84,25 +84,27 @@ if ($selected_asignatura_id && $selected_semestre_id && is_null($selected_anio_a
 if ($selected_asignatura_id && $selected_semestre_id && $profesor_id) {
     try {
         $stmt_notas = $pdo->prepare("
-    SELECT
-        ie.id AS inscripcion_id,
-        e.id AS estudiante_id,
-        u.nombre_completo AS nombre_estudiante,
-        n.nota,
-        n.estado AS estado_nota_bd,
-        n.estado_envio_acta,
-        n.observaciones_admin
-    FROM inscripciones_estudiantes ie
-    JOIN estudiantes e ON ie.id_estudiante = e.id
-    JOIN usuarios u ON e.id_usuario = u.id
-    LEFT JOIN notas n ON ie.id = n.id_inscripcion
-    JOIN grupos_asignaturas ga ON ie.id_grupo_asignatura = ga.id
-    WHERE ga.id_profesor = :profesor_id
-      AND ga.id_asignatura = :asignatura_id
-      AND ie.id_semestre = :semestre_id
-      AND ie.confirmada = 1
-    ORDER BY u.nombre_completo
-");
+        SELECT
+            ie.id AS inscripcion_id,
+            e.id AS estudiante_id,
+            u.nombre_completo AS nombre_estudiante,
+            n.nota,
+            n.estado AS estado_nota_bd,
+            n.estado_envio_acta,
+            n.observaciones_admin
+        FROM inscripciones_estudiantes ie
+        JOIN estudiantes e ON ie.id_estudiante = e.id
+        JOIN usuarios u ON e.id_usuario = u.id
+        LEFT JOIN notas n ON ie.id = n.id_inscripcion
+        JOIN horarios h ON ie.id_grupo_asignatura = h.id_grupo_asignatura
+        JOIN grupos_asignaturas ga ON h.id_grupo_asignatura = ga.id
+        WHERE ga.id_asignatura = :asignatura_id
+          AND ga.id_profesor = :profesor_id
+          AND h.id_semestre = :semestre_id
+          AND ie.confirmada = 1
+        ORDER BY u.nombre_completo
+    ");
+    
 
     
         

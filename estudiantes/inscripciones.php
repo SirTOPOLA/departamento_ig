@@ -32,6 +32,7 @@ $stmt_student_details = $pdo->prepare("
 $stmt_student_details->bindParam(':id_usuario', $_SESSION['user_id'], PDO::PARAM_INT);
 $stmt_student_details->execute();
 $student_context = $stmt_student_details->fetch(PDO::FETCH_ASSOC);
+ 
 
 if (!$student_context) {
     set_flash_message('danger', 'Error: No se encontró el contexto académico actual para su perfil de estudiante. Contacte a la administración.');
@@ -281,6 +282,7 @@ if ($current_semester) {
                                             <?php if (empty($enrollment['id_horario'])): ?>
                                                 <button type="button" class="btn btn-sm btn-info select-horario-btn" data-bs-toggle="modal"
                                                     data-bs-target="#selectHorarioModal"
+                                                    data-estudiante-id="<?= (int) ($id_estudiante_actual ?? 0) ?>"
                                                     data-inscripcion-id="<?= (int) ($enrollment['id_inscripcion'] ?? 0) ?>"
                                                     data-enrollment-id="<?= (int) ($enrollment['id'] ?? 0) ?>"
                                                     data-subject-id="<?= (int) ($enrollment['id_asignatura'] ?? 0) ?>"
@@ -400,6 +402,8 @@ if ($current_semester) {
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+  
+
         // Función para mostrar alertas de forma consistente en el modal
         function mostrarAlerta(mensaje, tipo = 'danger') {
             const contenedorAlerta = document.querySelector('.modal-body');
@@ -429,8 +433,12 @@ if ($current_semester) {
                 const idInscripcion = this.dataset.inscripcionId;
                 const idAsignatura = this.dataset.subjectId;
                 const idSemestre = this.dataset.semestreId;
+                const idEstudiante = this.dataset.estudianteId;
 
                 console.log('idInscripcion: '+idInscripcion)
+                console.log('estudiante: '+idEstudiante)
+                console.log('semestre: '+idSemestre)
+                console.log('Asignatura: '+idAsignatura)
                 // Guarda el ID de la inscripción en un campo oculto del modal
                 document.getElementById('modal-enrollment-id').value = idInscripcion;
 
@@ -446,6 +454,7 @@ if ($current_semester) {
                 const formData = new FormData();
                 formData.append('id_asignatura', idAsignatura);
                 formData.append('id_semestre', idSemestre);
+                formData.append('id_estudiante', idEstudiante);
 
                 // Fetch al nuevo endpoint
                 fetch('../api/obtener_grupos_por_asignatura.php', {
@@ -457,6 +466,7 @@ if ($current_semester) {
                         return response.json();
                     })
                     .then(data => {
+                        console.log(data)
                         if (data.success) {
                             if (data.grupos.length > 0) {
                                 // Construir tabla de grupos disponibles
