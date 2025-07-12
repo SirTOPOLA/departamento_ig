@@ -177,4 +177,229 @@ if (!function_exists('format_date')) {
         return $date->format('d/m/Y'); // Or any other format you prefer
     }
 }
+
+
+ 
+
+
+function confirmar_inscripcion_individual_logica(PDO $pdo, $id_inscripcion, $id_semestre_actual, $id_anio_academico_actual) {
+    try {
+        // 1. Obtener detalles de la inscripción
+        $stmt_inscripcion = $pdo->prepare("SELECT ie.id_estudiante, ie.id_asignatura, ie.id_semestre FROM inscripciones_estudiantes ie WHERE ie.id = :id_inscripcion AND ie.confirmada = 0");
+        $stmt_inscripcion->bindParam(':id_inscripcion', $id_inscripcion, PDO::PARAM_INT);
+        $stmt_inscripcion->execute();
+        $inscripcion_data = $stmt_inscripcion->fetch(PDO::FETCH_ASSOC);
+
+        if (!$inscripcion_data) {
+            return ['exito' => false, 'mensaje' => 'La inscripción no existe o ya ha sido confirmada/rechazada.'];
+        }
+
+        if ($inscripcion_data['id_semestre'] != $id_semestre_actual) {
+            return ['exito' => false, 'mensaje' => 'La inscripción no corresponde al semestre actual.'];
+        }
+
+        $id_estudiante = $inscripcion_data['id_estudiante'];
+        $id_asignatura = $inscripcion_data['id_asignatura'];
+
+        // 2. Obtener el curso de la asignatura
+        $stmt_asignatura_curso = $pdo->prepare("SELECT id_curso FROM asignaturas WHERE id = :id_asignatura");
+        $stmt_asignatura_curso->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
+        $stmt_asignatura_curso->execute();
+        $id_curso_asignatura = $stmt_asignatura_curso->fetchColumn();
+
+        if (!$id_curso_asignatura) {
+            return ['exito' => false, 'mensaje' => 'Asignatura no encontrada o sin curso asociado.'];
+        }
+
+        // 3. Verificar si el estudiante está matriculado como "activo" en el curso de la asignatura para el año académico actual
+        $stmt_matricula_curso = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM curso_estudiante ce
+            WHERE ce.id_estudiante = :id_estudiante
+            AND ce.id_curso = :id_curso
+            AND ce.id_anio = :id_anio_academico_actual
+            AND ce.estado = 'activo'
+        ");
+        $stmt_matricula_curso->bindParam(':id_estudiante', $id_estudiante, PDO::PARAM_INT);
+        $stmt_matricula_curso->bindParam(':id_curso', $id_curso_asignatura, PDO::PARAM_INT);
+        $stmt_matricula_curso->bindParam(':id_anio_academico_actual', $id_anio_academico_actual, PDO::PARAM_INT);
+        $stmt_matricula_curso->execute();
+        $esta_matriculado_en_curso = $stmt_matricula_curso->fetchColumn() > 0;
+
+        if (!$esta_matriculado_en_curso) {
+            return ['exito' => false, 'mensaje' => 'El estudiante no está matriculado activamente en el curso de esta asignatura para el año académico actual.'];
+        }
+
+        // 4. Confirmar la inscripción
+        $stmt_confirmar = $pdo->prepare("UPDATE inscripciones_estudiantes SET confirmada = 1 WHERE id = :id_inscripcion");
+        $stmt_confirmar->bindParam(':id_inscripcion', $id_inscripcion, PDO::PARAM_INT);
+        $stmt_confirmar->execute();
+
+        if ($stmt_confirmar->rowCount() === 0) {
+            return ['exito' => false, 'mensaje' => 'No se pudo confirmar la inscripción.'];
+        }
+
+        // 5. Insertar/Actualizar en historial_academico
+        // Verificar si ya existe una entrada para esta asignatura y semestre para evitar duplicados
+        $stmt_check_historial = $pdo->prepare("SELECT id FROM historial_academico WHERE id_estudiante = :id_estudiante AND id_asignatura = :id_asignatura AND id_semestre = :id_semestre");
+        $stmt_check_historial->bindParam(':id_estudiante', $id_estudiante, PDO::PARAM_INT);
+        $stmt_check_historial->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
+        $stmt_check_historial->bindParam(':id_semestre', $id_semestre_actual, PDO::PARAM_INT);
+        $stmt_check_historial->execute();
+        $historial_existente_id = $stmt_check_historial->fetchColumn();
+
+        if ($historial_existente_id) {
+            // Si ya existe, actualizamos su estado a PENDIENTE (o lo que corresponda al momento de inscripción)
+            $stmt_update_historial = $pdo->prepare("UPDATE historial_academico SET estado_final = 'PENDIENTE' WHERE id = :id_historial");
+            $stmt_update_historial->bindParam(':id_historial', $historial_existente_id, PDO::PARAM_INT);
+            $stmt_update_historial->execute();
+        } else {
+            // Si no existe, la insertamos
+            $stmt_insert_historial = $pdo->prepare("INSERT INTO historial_academico (id_estudiante, id_asignatura, id_semestre, nota_final, estado_final) VALUES (:id_estudiante, :id_asignatura, :id_semestre, NULL, 'PENDIENTE')");
+            $stmt_insert_historial->bindParam(':id_estudiante', $id_estudiante, PDO::PARAM_INT);
+            $stmt_insert_historial->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
+            $stmt_insert_historial->bindParam(':id_semestre', $id_semestre_actual, PDO::PARAM_INT);
+            $stmt_insert_historial->execute();
+        }
+
+        return ['exito' => true, 'mensaje' => 'Asignatura confirmada correctamente e historial actualizado.'];
+
+    } catch (PDOException $e) {
+        error_log("Error en confirmar_inscripcion_individual_logica: " . $e->getMessage());
+        return ['exito' => false, 'mensaje' => 'Error al procesar la confirmación: ' . $e->getMessage()];
+    }
+}
+
+
+/**
+ * Maneja las operaciones de agregar, editar y eliminar entradas de historial académico.
+ * @param PDO $pdo Objeto PDO de la base de datos.
+ * @param array $data Datos de la operación (id_estudiante, id_asignatura, id_semestre, nota_final, estado_final, id_historial_entry para editar/eliminar).
+ * @param string $action Tipo de acción: 'add', 'edit', 'delete'.
+ * @return array Un array asociativo con 'success' (boolean) y 'message' (string).
+ */
+
+ 
+
+function manejar_historial_academico_logica($pdo, $data, $operacion) {
+    $response = ['success' => false, 'message' => ''];
+
+    // Asegurarse de que el id_usuario_estudiante se reciba y sea válido
+    $id_usuario_estudiante = filter_var($data['id_usuario_estudiante'] ?? null, FILTER_VALIDATE_INT);
+    if (!$id_usuario_estudiante) {
+        $response['message'] = 'ID de usuario de estudiante no válido.';
+        return $response;
+    }
+
+    // Obtener el id real del estudiante de la tabla 'estudiantes'
+    $stmt_estudiante_id = $pdo->prepare("SELECT id FROM estudiantes WHERE id_usuario = :id_usuario");
+    $stmt_estudiante_id->bindParam(':id_usuario', $id_usuario_estudiante, PDO::PARAM_INT);
+    $stmt_estudiante_id->execute();
+    $id_estudiante_db = $stmt_estudiante_id->fetchColumn();
+
+    if (!$id_estudiante_db) {
+        $response['message'] = 'No se encontró el registro del estudiante en la base de datos.';
+        return $response;
+    }
+
+    $id_asignatura = filter_var($data['id_asignatura'] ?? null, FILTER_VALIDATE_INT);
+    $id_semestre = filter_var($data['id_semestre'] ?? null, FILTER_VALIDATE_INT); // AHORA USAMOS ESTE
+    $nota_final = filter_var($data['nota_final'] ?? null, FILTER_VALIDATE_FLOAT, ['options' => ['min_range' => 0, 'max_range' => 10]]);
+    $estado_final = trim($data['estado_final'] ?? '');
+
+    if (!$id_asignatura || !$id_semestre || $nota_final === null || $estado_final === '') {
+        $response['message'] = 'Datos incompletos o inválidos para la operación de historial académico.';
+        return $response;
+    }
+
+    try {
+        if ($operacion === 'add') {
+            // Verificar si ya existe una entrada para esta asignatura en este semestre para este estudiante
+            $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM historial_academico WHERE id_estudiante = :id_estudiante AND id_asignatura = :id_asignatura AND id_semestre = :id_semestre");
+            $stmt_check->bindParam(':id_estudiante', $id_estudiante_db, PDO::PARAM_INT);
+            $stmt_check->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
+            $stmt_check->bindParam(':id_semestre', $id_semestre, PDO::PARAM_INT);
+            $stmt_check->execute();
+            if ($stmt_check->fetchColumn() > 0) {
+                $response['message'] = 'Ya existe una entrada para esta asignatura en el semestre seleccionado. Utiliza la opción de editar si deseas modificarla.';
+                return $response;
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO historial_academico (id_estudiante, id_asignatura, id_semestre, nota_final, estado_final) VALUES (:id_estudiante, :id_asignatura, :id_semestre, :nota_final, :estado_final)");
+            $stmt->bindParam(':id_estudiante', $id_estudiante_db, PDO::PARAM_INT);
+            $stmt->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
+            $stmt->bindParam(':id_semestre', $id_semestre, PDO::PARAM_INT); // Usar el semestre seleccionado
+            $stmt->bindParam(':nota_final', $nota_final, PDO::PARAM_STR); // Usar STR para FLOAT para evitar problemas de precisión
+            $stmt->bindParam(':estado_final', $estado_final, PDO::PARAM_STR);
+            
+            if ($stmt->execute()) {
+                $response['success'] = true;
+                $response['message'] = 'Entrada de historial académico agregada con éxito.';
+            } else {
+                error_log("Error al insertar historial: " . json_encode($stmt->errorInfo()));
+                $response['message'] = 'Error al agregar la entrada de historial académico.';
+            }
+
+        } elseif ($operacion === 'edit') {
+            $id_historial_entry = filter_var($data['id_historial_entry'] ?? null, FILTER_VALIDATE_INT);
+            if (!$id_historial_entry) {
+                $response['message'] = 'ID de entrada de historial no válido para editar.';
+                return $response;
+            }
+
+            $stmt = $pdo->prepare("UPDATE historial_academico SET id_asignatura = :id_asignatura, id_semestre = :id_semestre, nota_final = :nota_final, estado_final = :estado_final WHERE id = :id_historial AND id_estudiante = :id_estudiante");
+            $stmt->bindParam(':id_asignatura', $id_asignatura, PDO::PARAM_INT);
+            $stmt->bindParam(':id_semestre', $id_semestre, PDO::PARAM_INT); // Usar el semestre seleccionado
+            $stmt->bindParam(':nota_final', $nota_final, PDO::PARAM_STR);
+            $stmt->bindParam(':estado_final', $estado_final, PDO::PARAM_STR);
+            $stmt->bindParam(':id_historial', $id_historial_entry, PDO::PARAM_INT);
+            $stmt->bindParam(':id_estudiante', $id_estudiante_db, PDO::PARAM_INT);
+
+            if ($stmt->execute()) {
+                if ($stmt->rowCount() > 0) {
+                    $response['success'] = true;
+                    $response['message'] = 'Entrada de historial académico actualizada con éxito.';
+                } else {
+                    $response['message'] = 'No se encontró la entrada de historial para actualizar o no se realizaron cambios.';
+                }
+            } else {
+                error_log("Error al actualizar historial: " . json_encode($stmt->errorInfo()));
+                $response['message'] = 'Error al actualizar la entrada de historial académico.';
+            }
+
+        } elseif ($operacion === 'delete') {
+            $id_historial_entry = filter_var($data['id_historial_entry'] ?? null, FILTER_VALIDATE_INT);
+            if (!$id_historial_entry) {
+                $response['message'] = 'ID de entrada de historial no válido para eliminar.';
+                return $response;
+            }
+
+            $stmt = $pdo->prepare("DELETE FROM historial_academico WHERE id = :id_historial AND id_estudiante = :id_estudiante");
+            $stmt->bindParam(':id_historial', $id_historial_entry, PDO::PARAM_INT);
+            $stmt->bindParam(':id_estudiante', $id_estudiante_db, PDO::PARAM_INT);
+
+            if ($stmt->execute()) {
+                if ($stmt->rowCount() > 0) {
+                    $response['success'] = true;
+                    $response['message'] = 'Entrada de historial académico eliminada con éxito.';
+                } else {
+                    $response['message'] = 'No se encontró la entrada de historial para eliminar.';
+                }
+            } else {
+                error_log("Error al eliminar historial: " . json_encode($stmt->errorInfo()));
+                $response['message'] = 'Error al eliminar la entrada de historial académico.';
+            }
+        } else {
+            $response['message'] = 'Operación de historial académico no reconocida.';
+        }
+    } catch (PDOException $e) {
+        error_log("PDO Exception in manejar_historial_academico_logica: " . $e->getMessage());
+        $response['message'] = 'Error de base de datos al gestionar historial: ' . $e->getMessage();
+    } catch (Exception $e) {
+        error_log("General Exception in manejar_historial_academico_logica: " . $e->getMessage());
+        $response['message'] = 'Error inesperado al gestionar historial: ' . $e->getMessage();
+    }
+
+    return $response;
+}
 ?>
